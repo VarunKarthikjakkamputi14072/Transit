@@ -159,6 +159,52 @@ pytest -q
 
 ---
 
+## Performance
+
+I load-tested the gateway with [k6](https://k6.io) against three scenarios: auth ramp (0→200 concurrent users), cache stampede (50 VUs hitting the same cold key simultaneously), and sustained mixed traffic. The test script is at [`docs/benchmarks/load_test.js`](./docs/benchmarks/load_test.js).
+
+### Results (200 peak VUs, 4 uvicorn workers)
+
+| Metric | Result |
+|---|---|
+| Throughput | **276 req/s** sustained |
+| Median response time | **45ms** |
+| p95 response time | 325ms |
+| Cache hit rate | **54.6%** (warm caches higher) |
+| Total requests handled | 63,559 |
+
+### What the test found and how it was fixed
+
+**Problem 1 — Synchronous DB writes blocking the event loop**
+
+The request logger (`_persist_log`) was opening a sync SQLAlchemy session and committing on the event loop for every `/api/*` request. Under 200 concurrent users this stacked 200 blocking DB commits — the event loop froze and every request timed out at 60s.
+
+Fix: all sync DB work now runs in `asyncio.to_thread()`. Logging is fire-and-forget via `loop.create_task(asyncio.to_thread(...))` — the response is returned to the client before the log write starts.
+
+**Problem 2 — Per-request DB lookup on the auth path**
+
+Every request hit Postgres to resolve API key → developer tier, even for the same key called repeatedly. Under load this exhausted the connection pool.
+
+Fix: a Redis key→tier cache (`keytier:<hash>`, 60s TTL) means the DB is only hit once per key per minute. Subsequent requests resolve tier from Redis in under 1ms.
+
+**Problem 3 — Cache stampede on cold keys**
+
+When 50 concurrent requests all missed the same cache key, 50 upstream calls went out simultaneously.
+
+Fix: single-flight lock via Redis `SET NX` — only one caller fetches the upstream value, the rest wait and read the populated cache. `upstream_calls_total` in the k6 summary drops from 50 to 1 on a cold key.
+
+To run the load test yourself:
+
+```bash
+brew install k6
+docker compose up -d
+k6 run docs/benchmarks/load_test.js \
+  -e API_KEY=af_your_key \
+  -e BASE_URL=http://localhost:8000
+```
+
+---
+
 ## Developer portal (`web/`)
 
 A dark, terminal-themed developer console built with **Next.js 14** (App Router,

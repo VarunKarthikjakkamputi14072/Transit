@@ -110,8 +110,20 @@ async def get_aggregate(
     limit: int = Query(5, ge=1, le=50),
     api_key: APIKey = Depends(require_api_key),
 ) -> AggregateResponse:
-    """Fan-out: fetch weather + news in parallel and combine."""
+    """Fan-out: fetch weather + news in parallel and combine.
+
+    The combined result is cached at the aggregate level (TTL = shortest
+    of the two constituent TTLs) so repeated identical requests skip both
+    upstream calls entirely.
+    """
     settings = get_settings()
+    aggregate_params = {"city": city.lower(), "topic": topic.lower(), "limit": limit}
+
+    # Check aggregate-level cache first — avoids all downstream work on hit.
+    agg_cached = await get_cached("aggregate", aggregate_params)
+    if agg_cached is not None:
+        return AggregateResponse.model_validate(agg_cached)
+
     weather_params = {"city": city.lower()}
     news_params = {"topic": topic.lower(), "limit": limit}
 
@@ -153,10 +165,17 @@ async def get_aggregate(
     if news_outcome[2]:
         errors["news"] = news_outcome[2]
 
-    return AggregateResponse(
+    result = AggregateResponse(
         city=city,
         topic=topic,
         weather=weather_outcome[0],
         news=news_outcome[0],
         errors=errors,
     )
+
+    # Cache the combined result if both upstreams succeeded (no partial errors).
+    if not errors:
+        agg_ttl = min(settings.cache_ttl_weather, settings.cache_ttl_news)
+        await set_cached("aggregate", aggregate_params, result.model_dump(mode="json"), agg_ttl)
+
+    return result
