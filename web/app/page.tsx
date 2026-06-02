@@ -13,36 +13,29 @@ import {
 } from "lucide-react";
 import { CodeSnippet } from "@/components/CodeSnippet";
 
-const TIERS = [
+const ARCHITECTURE_INSIGHTS = [
   {
-    name: "Free",
-    price: "$0",
-    cadence: "/ forever",
-    quota: "100 requests / hour",
-    description: "For prototypes, indie hacks, and learning.",
+    name: "Dynamic Rate Limiting",
+    metric: "276 req/s",
+    context: "Load tested at 200 VUs",
+    description: "Built to demonstrate role-based access control (RBAC). The system dynamically applies different Redis sliding-window rate limits based on user tiers (e.g., 100/hr vs 5000/hr) without hardcoding limits at the gateway edge.",
     features: [
-      "All gateway endpoints",
-      "10-minute weather cache",
-      "Basic usage analytics",
-      "1 API key",
+      "Redis sliding window algorithm",
+      "Atomic Lua scripts to prevent race conditions",
+      "Dynamic tier resolution on the fly",
     ],
-    cta: { label: "Start free", href: "/dashboard", primary: true },
     accent: false,
   },
   {
-    name: "Pro",
-    price: "$29",
-    cadence: "/ month",
-    quota: "1,000 requests / hour",
-    description: "For production traffic and growing apps.",
+    name: "Cache Stampede Protection",
+    metric: "45ms",
+    context: "Median latency under load",
+    description: "Designed to handle high concurrency safely. If 50 users request the same data simultaneously, the gateway uses a Redis lock to ensure only one upstream request is made, serving the rest from cache.",
     features: [
-      "Everything in Free",
-      "Priority upstream connections",
-      "Advanced analytics + CSV export",
-      "5 API keys + key rotation",
-      "Email support",
+      "Redis NX single-flight locks",
+      "Asynchronous request queuing",
+      "Background logging (asyncio.to_thread)",
     ],
-    cta: { label: "Upgrade", href: "/dashboard", primary: true },
     accent: true,
   },
 ];
@@ -203,57 +196,43 @@ console.log(weather.temperature_c, weather.condition);`,
         </div>
       </section>
 
-      {/* Pricing */}
-      <section id="pricing" className="border-t border-terminal-border bg-terminal-panel/30">
+      {/* Architecture Insights */}
+      <section id="architecture" className="border-t border-terminal-border bg-terminal-panel/30">
         <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
           <div className="mx-auto max-w-2xl text-center">
-            <div className="section-title">Pricing</div>
+            <div className="section-title">Engineering Context</div>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-50 sm:text-4xl">
-              Pay for traffic, not seats.
+              Why this was built
             </h2>
             <p className="mt-3 text-slate-400">
-              Start free, upgrade when your app finds its audience.
+              APIForge is a portfolio project designed to demonstrate production backend patterns, system resilience, and high-concurrency handling.
             </p>
           </div>
 
           <div className="mx-auto mt-12 grid max-w-4xl gap-6 sm:grid-cols-2">
-            {TIERS.map((tier) => (
+            {ARCHITECTURE_INSIGHTS.map((insight) => (
               <div
-                key={tier.name}
-                className={`panel p-6 ${
-                  tier.accent ? "border-terminal-accent/50 shadow-glow" : ""
+                key={insight.name}
+                className={`panel p-6 flex flex-col ${
+                  insight.accent ? "border-terminal-accent/50 shadow-glow" : ""
                 }`}
               >
                 <div className="flex items-baseline justify-between">
-                  <h3 className="text-lg font-semibold text-slate-100">{tier.name}</h3>
-                  {tier.accent && (
-                    <span className="badge bg-terminal-accentDim/40 text-terminal-accent">
-                      Most popular
-                    </span>
-                  )}
+                  <h3 className="text-lg font-semibold text-slate-100">{insight.name}</h3>
                 </div>
-                <div className="mt-3 flex items-baseline gap-1">
-                  <span className="text-4xl font-bold text-slate-50">{tier.price}</span>
-                  <span className="text-sm text-slate-400">{tier.cadence}</span>
+                <div className="mt-3 flex items-baseline gap-2">
+                  <span className="text-4xl font-bold text-slate-50">{insight.metric}</span>
+                  <span className="text-sm text-slate-400">{insight.context}</span>
                 </div>
-                <div className="mt-2 mono text-sm text-terminal-accent">{tier.quota}</div>
-                <p className="mt-3 text-sm text-slate-400">{tier.description}</p>
-                <ul className="mt-5 space-y-2 text-sm text-slate-200">
-                  {tier.features.map((feature) => (
+                <p className="mt-4 text-sm text-slate-400 flex-grow">{insight.description}</p>
+                <ul className="mt-6 space-y-2 text-sm text-slate-200">
+                  {insight.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-2">
                       <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-terminal-accent" />
                       <span>{feature}</span>
                     </li>
                   ))}
                 </ul>
-                <Link
-                  href={tier.cta.href}
-                  className={`mt-6 w-full ${
-                    tier.cta.primary ? "btn-primary" : "btn-ghost"
-                  }`}
-                >
-                  {tier.cta.label}
-                </Link>
               </div>
             ))}
           </div>
