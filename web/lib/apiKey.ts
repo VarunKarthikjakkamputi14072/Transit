@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MOCK_API_KEY } from "./mock";
 
 const STORAGE_KEY = "apiforge.api_key";
 const CREATED_KEY = "apiforge.api_key.created";
 
 export function useApiKey() {
+  // No mock fallback: when nothing is stored the key is empty, and the
+  // dashboard shows a "generate a real key" empty state instead of a fake one.
   const [apiKey, setApiKeyState] = useState<string>("");
   const [createdAt, setCreatedAt] = useState<string>("");
   const [hydrated, setHydrated] = useState(false);
@@ -17,10 +18,6 @@ export function useApiKey() {
     if (stored) {
       setApiKeyState(stored);
       setCreatedAt(created ?? new Date().toISOString());
-    } else {
-      const now = new Date().toISOString();
-      setApiKeyState(MOCK_API_KEY);
-      setCreatedAt(now);
     }
     setHydrated(true);
   }, []);
@@ -35,8 +32,8 @@ export function useApiKey() {
     } else {
       window.localStorage.removeItem(STORAGE_KEY);
       window.localStorage.removeItem(CREATED_KEY);
-      setApiKeyState(MOCK_API_KEY);
-      setCreatedAt(new Date().toISOString());
+      setApiKeyState("");
+      setCreatedAt("");
     }
   };
 

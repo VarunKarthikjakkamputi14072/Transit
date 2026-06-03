@@ -134,3 +134,34 @@ export async function fetchUsage(
     return null;
   }
 }
+
+/**
+ * Register a developer against the live backend and return a real `af_` API key.
+ * Used by the dashboard's "Generate API key" action so the key shown is a real,
+ * working credential (not a mock). Returns null if there's no live backend or
+ * the request fails.
+ *
+ * The portal has no login, so each generate creates a fresh throwaway developer
+ * account; the returned key is persisted client-side (localStorage) and works
+ * against every /api/* endpoint.
+ */
+export async function registerDeveloper(): Promise<{ apiKey: string; tier: string } | null> {
+  if (!HAS_LIVE_BACKEND) return null;
+  const rand = Math.random().toString(36).slice(2, 10);
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: `demo+${rand}@apiforge.dev`,
+        password: `demo-${rand}-${Math.random().toString(36).slice(2, 10)}`,
+      }),
+    });
+    if (!res.ok) return null;
+    const d = await res.json();
+    if (!d.api_key) return null;
+    return { apiKey: String(d.api_key), tier: String(d.tier ?? "free") };
+  } catch {
+    return null;
+  }
+}

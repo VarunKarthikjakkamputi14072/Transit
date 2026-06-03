@@ -1,80 +1,106 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Activity, Gauge, History } from "lucide-react";
+import { ArrowRight, Activity, Gauge, History, KeyRound, Loader2 } from "lucide-react";
 import { ApiKeyCard } from "@/components/ApiKeyCard";
 import { CodeSnippet } from "@/components/CodeSnippet";
 import { UsageChart } from "@/components/UsageChart";
 import { useApiKey } from "@/lib/apiKey";
 import { mockUsage } from "@/lib/mock";
 import { buildLanguageSnippets } from "@/lib/snippets";
-import { API_BASE_URL, HAS_LIVE_BACKEND } from "@/lib/api";
-import { MOCK_API_KEY } from "@/lib/mock";
+import { API_BASE_URL, HAS_LIVE_BACKEND, fetchUsage, registerDeveloper } from "@/lib/api";
 
 export default function DashboardPage() {
   const { apiKey, createdAt, setApiKey, hydrated } = useApiKey();
-  const usage = useMemo(() => mockUsage(), []);
+
+  // Real gateway traffic (global) with a mock fallback only when no backend.
+  const [usage, setUsage] = useState(() => mockUsage());
+  const [generating, setGenerating] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchUsage("24h").then((real) => {
+      if (!cancelled && real) setUsage(real);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const avgLatency = useMemo(() => {
+    if (!usage.recent.length) return 0;
+    return Math.round(
+      usage.recent.reduce((a, b) => a + b.latency_ms, 0) / usage.recent.length,
+    );
+  }, [usage.recent]);
+
+  const last24h = useMemo(
+    () => usage.hourly.reduce((a, b) => a + b.requests, 0),
+    [usage.hourly],
+  );
+
+  async function generateKey() {
+    setGenerating(true);
+    const result = await registerDeveloper();
+    if (result) setApiKey(result.apiKey);
+    setGenerating(false);
+  }
 
   const baseUrlForSnippets = HAS_LIVE_BACKEND ? API_BASE_URL : "https://api.apiforge.dev";
+  const snippetKey = apiKey || "af_your_key_here";
 
   const weatherSnippets = buildLanguageSnippets({
     baseUrl: baseUrlForSnippets,
-    apiKey: apiKey || MOCK_API_KEY,
+    apiKey: snippetKey,
     path: "/api/weather/Berlin",
   });
-
   const aggregateSnippets = buildLanguageSnippets({
     baseUrl: baseUrlForSnippets,
-    apiKey: apiKey || MOCK_API_KEY,
+    apiKey: snippetKey,
     path: "/api/aggregate?city=Tokyo&topic=ai",
   });
+
+  const showEmptyState = hydrated && !apiKey;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
       <PageHeader
         title="Dashboard"
-        subtitle="Your APIForge key, live usage, and copy-paste-ready snippets."
+        subtitle="Generate a real API key, watch live gateway traffic, and grab copy-paste-ready snippets."
       />
-
-      {!HAS_LIVE_BACKEND && (
-        <DemoBanner className="mt-6" />
-      )}
 
       <div className="mt-8 grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <ApiKeyCard
-            apiKey={hydrated ? apiKey : ""}
-            createdAt={hydrated ? createdAt : ""}
-            onRotate={() => {
-              const next =
-                "af_" +
-                Array.from({ length: 32 }, () =>
-                  Math.floor(Math.random() * 16).toString(16),
-                ).join("");
-              setApiKey(next);
-            }}
-            onRevoke={() => setApiKey("")}
-          />
+          {showEmptyState ? (
+            <EmptyKeyState onGenerate={generateKey} generating={generating} />
+          ) : (
+            <ApiKeyCard
+              apiKey={hydrated ? apiKey : ""}
+              createdAt={hydrated ? createdAt : ""}
+              onRotate={generateKey}
+              onRevoke={() => setApiKey("")}
+            />
+          )}
         </div>
         <div className="grid gap-6">
           <StatCard
             icon={<Activity className="h-4 w-4" />}
             label="Requests today"
             value={usage.today.toLocaleString()}
-            footnote={`${usage.week.toLocaleString()} this week`}
+            footnote={`${usage.week.toLocaleString()} this week · gateway-wide`}
           />
           <StatCard
             icon={<Gauge className="h-4 w-4" />}
-            label="Remaining this hour"
-            value={`${usage.remaining}/${usage.hourly_limit}`}
-            footnote="Resets at the top of the next hour"
+            label="Avg latency"
+            value={`${avgLatency} ms`}
+            footnote="Across recent gateway requests"
             tone="accent"
           />
           <StatCard
             icon={<History className="h-4 w-4" />}
             label="Last 24 hours"
-            value={`${usage.hourly.reduce((a, b) => a + b.requests, 0)} req`}
+            value={`${last24h.toLocaleString()} req`}
             footnote="See the analytics tab for breakdowns"
           />
         </div>
@@ -85,7 +111,7 @@ export default function DashboardPage() {
           <div>
             <h3 className="text-sm font-semibold text-slate-100">Usage · last 24h</h3>
             <p className="text-xs text-slate-500">
-              Hourly request volume on this API key
+              Hourly request volume across the gateway
             </p>
           </div>
           <Link
@@ -105,7 +131,9 @@ export default function DashboardPage() {
           <div>
             <h2 className="text-lg font-semibold text-slate-100">Quick start</h2>
             <p className="text-sm text-slate-400">
-              Drop these into your next project. The key is your real key.
+              {apiKey
+                ? "These use your real key — paste and run."
+                : "Generate a key above to drop your real credential into these."}
             </p>
           </div>
           <Link
@@ -121,6 +149,50 @@ export default function DashboardPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+function EmptyKeyState({
+  onGenerate,
+  generating,
+}: {
+  onGenerate: () => void;
+  generating: boolean;
+}) {
+  return (
+    <section className="panel flex h-full flex-col items-start justify-center gap-4 px-6 py-10">
+      <div className="flex items-center gap-2">
+        <KeyRound className="h-5 w-5 text-terminal-accent" />
+        <h3 className="text-base font-semibold text-slate-100">No API key yet</h3>
+      </div>
+      <p className="max-w-md text-sm text-slate-400">
+        Generate a real APIForge key. It registers a developer account on the
+        live gateway and returns a working <span className="mono">af_</span> key
+        you can use against every endpoint right away.
+      </p>
+      <button
+        type="button"
+        onClick={onGenerate}
+        disabled={generating}
+        className="btn-primary"
+      >
+        {generating ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Generating…
+          </>
+        ) : (
+          <>
+            <KeyRound className="h-4 w-4" />
+            Generate API key
+          </>
+        )}
+      </button>
+      <p className="text-xs text-slate-500">
+        Stored only in your browser. The gateway keeps an HMAC-SHA256 hash, never
+        the raw key.
+      </p>
+    </section>
   );
 }
 
@@ -152,41 +224,13 @@ function StatCard({
       <div className="flex items-center justify-between text-xs uppercase tracking-wider text-slate-400">
         <span>{label}</span>
         <span
-          className={
-            tone === "accent"
-              ? "text-terminal-accent"
-              : "text-slate-500"
-          }
+          className={tone === "accent" ? "text-terminal-accent" : "text-slate-500"}
         >
           {icon}
         </span>
       </div>
       <div className="mt-2 mono text-2xl font-semibold text-slate-50">{value}</div>
       {footnote && <div className="mt-1 text-xs text-slate-500">{footnote}</div>}
-    </div>
-  );
-}
-
-function DemoBanner({ className = "" }: { className?: string }) {
-  return (
-    <div
-      className={`flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 ${className}`}
-    >
-      <div>
-        <strong className="font-semibold">Demo mode.</strong>{" "}
-        <span className="text-amber-200/90">
-          No <span className="mono">NEXT_PUBLIC_APIFORGE_BASE_URL</span> set —
-          showing mocked data. Configure it to drive the live gateway.
-        </span>
-      </div>
-      <a
-        href="https://github.com/VarunKarthikjakkamputi14072/APIForge-#quickstart"
-        className="text-amber-100 underline-offset-2 hover:underline"
-        target="_blank"
-        rel="noreferrer"
-      >
-        Setup guide →
-      </a>
     </div>
   );
 }
