@@ -91,3 +91,46 @@ export async function callEndpoint<T = unknown>(
     };
   }
 }
+
+/**
+ * Fetch real usage analytics from the backend's /api/analytics/usage endpoint.
+ * Returns a normalized UsageSummary, or null if there's no live backend or the
+ * request fails (callers fall back to mock data in that case).
+ *
+ * The endpoint returns global gateway traffic (today/week/hourly/by_endpoint/
+ * recent) read from the request_logs table — i.e. real requests this gateway
+ * has served.
+ */
+export async function fetchUsage(
+  period: "24h" | "7d" | "30d" = "24h",
+): Promise<import("./types").UsageSummary | null> {
+  if (!HAS_LIVE_BACKEND) return null;
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/api/analytics/usage?period=${period}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) return null;
+    const d = await res.json();
+    const recent = (d.recent ?? []).map(
+      (r: Record<string, unknown>, i: number) => ({
+        id: String(r.timestamp ?? i),
+        endpoint: String(r.endpoint ?? ""),
+        status: Number(r.status ?? 0),
+        latency_ms: Number(r.latency_ms ?? 0),
+        timestamp: String(r.timestamp ?? ""),
+      }),
+    );
+    return {
+      today: Number(d.today ?? 0),
+      week: Number(d.week ?? 0),
+      hourly_limit: 100,
+      remaining: 0,
+      hourly: d.hourly ?? [],
+      by_endpoint: d.by_endpoint ?? [],
+      recent,
+    };
+  } catch {
+    return null;
+  }
+}

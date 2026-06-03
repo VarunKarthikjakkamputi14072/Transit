@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -14,11 +14,28 @@ import {
 import { UsageChart } from "@/components/UsageChart";
 import { RequestLogTable } from "@/components/RequestLog";
 import { mockUsage } from "@/lib/mock";
+import { fetchUsage } from "@/lib/api";
 
 const BAR_COLORS = ["#22d3a3", "#38bdf8", "#a78bfa", "#f472b6"];
 
 export default function AnalyticsPage() {
-  const usage = useMemo(() => mockUsage(), []);
+  // Render mock data instantly, then swap in real gateway traffic from
+  // /api/analytics/usage when a live backend is configured.
+  const [usage, setUsage] = useState(() => mockUsage());
+  const [isLive, setIsLive] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchUsage("24h").then((real) => {
+      if (!cancelled && real) {
+        setUsage(real);
+        setIsLive(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const avgLatency = useMemo(() => {
     if (usage.recent.length === 0) return 0;
@@ -41,8 +58,18 @@ export default function AnalyticsPage() {
           Traffic & latency
         </h1>
         <p className="max-w-2xl text-sm text-slate-400">
-          A live view of your API usage. Demo data is shown below — wire up the
-          backend to populate from <span className="mono">request_logs</span>.
+          {isLive ? (
+            <>
+              Live gateway traffic, read from{" "}
+              <span className="mono">request_logs</span> on the backend.
+            </>
+          ) : (
+            <>
+              Demo data shown below — start the backend (or set{" "}
+              <span className="mono">NEXT_PUBLIC_APIFORGE_BASE_URL</span>) to see
+              live traffic from <span className="mono">request_logs</span>.
+            </>
+          )}
         </p>
       </header>
 

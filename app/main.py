@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,7 +15,7 @@ from app.database import SessionLocal, get_db, init_db
 from app.middleware import APIKeyRateLimitAndLogMiddleware
 from app.models import RateLimitConfig
 from app.redis_client import close_redis
-from app.routers import auth, gateway
+from app.routers import analytics, auth, gateway
 from app.upstream.base import close_http_client
 
 
@@ -63,8 +64,22 @@ def create_app() -> FastAPI:
 
     app.add_middleware(APIKeyRateLimitAndLogMiddleware)
 
+    # CORS: the gateway is meant to be called cross-origin (from the developer
+    # portal on Vercel and from any client). Auth is via the X-API-Key header,
+    # not cookies, so credentials are not needed and wildcard origins are safe.
+    # Added after the rate-limit middleware so it sits outermost and answers
+    # CORS preflight (OPTIONS) before auth/rate-limit logic runs.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     app.include_router(auth.router)
     app.include_router(gateway.router)
+    app.include_router(analytics.router)
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:
