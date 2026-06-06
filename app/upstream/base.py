@@ -46,7 +46,7 @@ def get_http_client() -> httpx.AsyncClient:
         settings = get_settings()
         _shared_client = httpx.AsyncClient(
             timeout=httpx.Timeout(settings.upstream_timeout_seconds),
-            headers={"User-Agent": "APIForge/0.1"},
+            headers={"User-Agent": "Transit/0.1"}
         )
     return _shared_client
 

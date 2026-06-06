@@ -8,7 +8,7 @@ export function Footer() {
         <div className="md:col-span-2">
           <Logo />
           <p className="mt-3 max-w-sm text-sm text-slate-400">
-            APIForge unifies third-party APIs behind a single, rate-limited,
+            Transit unifies third-party APIs behind a single, rate-limited,
             analytics-rich endpoint. Built for indie developers and ship-fast
             teams.
           </p>
@@ -43,7 +43,7 @@ export function Footer() {
             </li>
             <li>
               <a
-                href="https://github.com/VarunKarthikjakkamputi14072/APIForge-"
+                href="https://github.com/VarunKarthikjakkamputi14072/Transit-"
                 className="hover:text-terminal-accent"
                 target="_blank"
                 rel="noreferrer"
@@ -55,7 +55,7 @@ export function Footer() {
         </div>
       </div>
       <div className="border-t border-terminal-border px-4 py-4 text-center text-xs text-slate-500 sm:px-6">
-        <span className="mono">apiforge</span> · MIT licensed · built with
+        <span className="mono">transit</span> · MIT licensed · built with
         FastAPI + Next.js
       </div>
     </footer>

@@ -19,7 +19,7 @@ API_KEY_PREFIX = "af_"
 
 # bcrypt truncates passwords > 72 bytes; we hash first to avoid that limit
 # and to support arbitrary-length passwords safely.
-_BCRYPT_PEPPER = b"apiforge:pwd:"
+_BCRYPT_PEPPER = b"transit:pwd:"
 
 
 def _prepare_password(password: str) -> bytes:

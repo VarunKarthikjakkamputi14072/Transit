@@ -97,7 +97,7 @@ export function ApiKeyCard({ apiKey, createdAt, onRevoke, onRotate, className = 
             </button>
           )}
           <p className="text-xs text-slate-500">
-            Treat this key like a password. APIForge stores only an HMAC-SHA256
+            Treat this key like a password. Transit stores only an HMAC-SHA256
             hash — we can&apos;t show it again after revocation.
           </p>
         </div>

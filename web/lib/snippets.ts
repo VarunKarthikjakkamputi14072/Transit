@@ -39,7 +39,7 @@ const res = await fetch("${url}", {
   headers: { "X-API-Key": apiKey },
 });
 if (!res.ok) {
-  throw new Error(\`APIForge returned \${res.status}\`);
+  throw new Error(\`Transit returned \${res.status}\`);
 }
 const data = await res.json();
 console.log(data);`,

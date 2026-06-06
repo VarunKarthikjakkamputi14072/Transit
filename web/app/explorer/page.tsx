@@ -45,7 +45,7 @@ const ENDPOINTS: Record<
     method: "GET",
     label: "/api/weather/{city}",
     description:
-      "Fetch current weather for a city and normalize to APIForge's unified schema.",
+      "Fetch current weather for a city and normalize to Transit's unified schema.",
     template: "/api/weather/{city}",
     params: [
       {
@@ -193,7 +193,7 @@ export default function ExplorerPage() {
     setLoading(false);
   };
 
-  const baseUrlForSnippets = HAS_LIVE_BACKEND ? API_BASE_URL : "https://api.apiforge.dev";
+  const baseUrlForSnippets = HAS_LIVE_BACKEND ? API_BASE_URL : "https://api.transitapi.dev";
   const snippets = buildLanguageSnippets({
     baseUrl: baseUrlForSnippets,
     apiKey: hydrated ? apiKey : "af_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
@@ -312,7 +312,7 @@ export default function ExplorerPage() {
           <div className="grid gap-6 lg:grid-cols-2">
             <ResponsePanel
               title="Normalized response"
-              subtitle="APIForge unified schema"
+              subtitle="Transit unified schema"
               accent
               value={normalized}
               empty="Send a request to see the normalized JSON."

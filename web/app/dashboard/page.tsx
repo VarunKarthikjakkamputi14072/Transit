@@ -47,7 +47,7 @@ export default function DashboardPage() {
     setGenerating(false);
   }
 
-  const baseUrlForSnippets = HAS_LIVE_BACKEND ? API_BASE_URL : "https://api.apiforge.dev";
+  const baseUrlForSnippets = HAS_LIVE_BACKEND ? API_BASE_URL : "https://api.transitapi.dev";
   const snippetKey = apiKey || "af_your_key_here";
 
   const weatherSnippets = buildLanguageSnippets({
@@ -166,7 +166,7 @@ function EmptyKeyState({
         <h3 className="text-base font-semibold text-slate-100">No API key yet</h3>
       </div>
       <p className="max-w-md text-sm text-slate-400">
-        Generate a real APIForge key. It registers a developer account on the
+        Generate a real Transit key. It registers a developer account on the
         live gateway and returns a working <span className="mono">af_</span> key
         you can use against every endpoint right away.
       </p>

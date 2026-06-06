@@ -1,9 +1,9 @@
-# APIForge
+# Transit
 
 **Portal:** https://apiforge-portal.vercel.app  
 **API:** https://apiforge-jnwp.onrender.com
 
-APIForge is a developer-facing API gateway that unifies third-party APIs
+Transit is a developer-facing API gateway that unifies third-party APIs
 (OpenWeather · NewsAPI · Alpha Vantage) behind one rate-limited, authenticated,
 analytics-rich REST endpoint — plus a Next.js developer portal to manage keys,
 explore requests, and visualize usage.

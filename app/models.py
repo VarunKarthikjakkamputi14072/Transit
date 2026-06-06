@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM models for APIForge."""
+"""SQLAlchemy ORM models for Transit."""
 
 from __future__ import annotations
 

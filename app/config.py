@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Runtime settings for APIForge.
+    """Runtime settings for Transit.
 
     Values are read from environment variables (see `.env.example`).
     """

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-const STORAGE_KEY = "apiforge.api_key";
-const CREATED_KEY = "apiforge.api_key.created";
+const STORAGE_KEY = "transit.api_key";
+const CREATED_KEY = "transit.api_key.created";
 
 export function useApiKey() {
   // No mock fallback: when nothing is stored the key is empty, and the

@@ -84,7 +84,7 @@ export default function LandingPage() {
               .
             </h1>
             <p className="mt-5 text-balance text-base text-slate-300 sm:text-lg">
-              APIForge unifies weather, news, and finance providers behind a
+              Transit unifies weather, news, and finance providers behind a
               single rate-limited REST endpoint — with analytics, caching, and
               authentication baked in.
             </p>
@@ -112,11 +112,11 @@ export default function LandingPage() {
                   label: "curl",
                   language: "shell",
                   code: `# Register, get an API key, make a call.
-curl -s -X POST https://api.apiforge.dev/auth/register \\
+curl -s -X POST https://api.transitapi.dev/auth/register \\
   -H "Content-Type: application/json" \\
   -d '{"email":"you@example.com","password":"supersecret123"}'
 
-curl -s "https://api.apiforge.dev/api/weather/Berlin" \\
+curl -s "https://api.transitapi.dev/api/weather/Berlin" \\
   -H "X-API-Key: af_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" | jq`,
                 },
                 {
@@ -126,7 +126,7 @@ curl -s "https://api.apiforge.dev/api/weather/Berlin" \\
 
 api_key = "af_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 weather = httpx.get(
-    "https://api.apiforge.dev/api/weather/Berlin",
+    "https://api.transitapi.dev/api/weather/Berlin",
     headers={"X-API-Key": api_key},
 ).json()
 
@@ -136,7 +136,7 @@ print(weather["temperature_c"], weather["condition"])`,
                   label: "JavaScript",
                   language: "javascript",
                   code: `const apiKey = "af_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
-const res = await fetch("https://api.apiforge.dev/api/weather/Berlin", {
+const res = await fetch("https://api.transitapi.dev/api/weather/Berlin", {
   headers: { "X-API-Key": apiKey },
 });
 const weather = await res.json();
@@ -174,7 +174,7 @@ console.log(weather.temperature_c, weather.condition);`,
       {/* Features */}
       <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <div className="section-title">Why APIForge</div>
+          <div className="section-title">Why Transit</div>
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-slate-50 sm:text-4xl">
             Production plumbing, on tap.
           </h2>
@@ -205,7 +205,7 @@ console.log(weather.temperature_c, weather.condition);`,
               Why this was built
             </h2>
             <p className="mt-3 text-slate-400">
-              APIForge is a portfolio project designed to demonstrate production backend patterns, system resilience, and high-concurrency handling.
+              Transit is a portfolio project designed to demonstrate production backend patterns, system resilience, and high-concurrency handling.
             </p>
           </div>
 

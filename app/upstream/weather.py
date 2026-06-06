@@ -1,4 +1,4 @@
-"""OpenWeather client + normalization to APIForge's unified schema."""
+"""OpenWeather client + normalization to Transit's unified schema."""
 
 from __future__ import annotations
 

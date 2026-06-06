@@ -5,12 +5,12 @@ import { Footer } from "@/components/Footer";
 
 export const metadata: Metadata = {
   title: {
-    default: "APIForge — Developer API Gateway",
-    template: "%s · APIForge",
+    default: "Transit — Developer API Gateway",
+    template: "%s · Transit",
   },
   description:
-    "APIForge is a developer-first API gateway that unifies weather, news, and finance APIs behind a single rate-limited, analytics-rich endpoint.",
-  metadataBase: new URL("https://apiforge.dev"),
+    "Transit is a developer-first API gateway that unifies weather, news, and finance APIs behind a single rate-limited, analytics-rich endpoint.",
+  metadataBase: new URL("https://transit.dev"),
 };
 
 export default function RootLayout({

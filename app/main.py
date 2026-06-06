@@ -1,4 +1,4 @@
-"""APIForge FastAPI entry point."""
+"""Transit FastAPI entry point."""
 
 from __future__ import annotations
 
@@ -52,10 +52,10 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="APIForge",
+        title="Transit",
         version=__version__,
         description=(
-            "APIForge is a developer API gateway that fans out to upstream services "
+            "Transit is a developer API gateway that fans out to upstream services "
             "(OpenWeather, NewsAPI, Alpha Vantage) and exposes a unified, rate-limited, "
             "authenticated REST surface."
         ),
@@ -88,7 +88,7 @@ def create_app() -> FastAPI:
     @app.get("/", tags=["meta"])
     def root() -> dict[str, str]:
         return {
-            "name": "APIForge",
+            "name": "Transit",
             "version": __version__,
             "docs": "/docs",
         }

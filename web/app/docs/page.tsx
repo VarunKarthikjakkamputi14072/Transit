@@ -21,7 +21,7 @@ type EndpointDoc = {
 export default function DocsPage() {
   const { apiKey, hydrated } = useApiKey();
 
-  const baseUrl = HAS_LIVE_BACKEND ? API_BASE_URL : "https://api.apiforge.dev";
+  const baseUrl = HAS_LIVE_BACKEND ? API_BASE_URL : "https://api.transitapi.dev";
   const keyForSnippets = hydrated ? apiKey : MOCK_API_KEY;
 
   const endpoints: EndpointDoc[] = useMemo(

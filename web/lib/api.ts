@@ -153,7 +153,7 @@ export async function registerDeveloper(): Promise<{ apiKey: string; tier: strin
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        email: `demo+${rand}@apiforge.dev`,
+        email: `demo+${rand}@transitapi.dev`,
         password: `demo-${rand}-${Math.random().toString(36).slice(2, 10)}`,
       }),
     });

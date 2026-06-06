@@ -1,4 +1,4 @@
-"""Analytics router for APIForge."""
+"""Analytics router for Transit."""
 
 from datetime import datetime, timedelta
 
