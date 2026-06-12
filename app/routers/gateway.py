@@ -1,26 +1,14 @@
-"""Gateway routes for weather, news, finance, and aggregate."""
+"""Gateway routes — AI chat completions backed by NVIDIA NIM."""
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-
-from app.cache import get_cached, set_cached
-from app.config import get_settings
 from app.deps import require_api_key
 from app.models import APIKey
-from app.schemas import (
-    AggregateResponse,
-    FinanceQuoteResponse,
-    NewsResponse,
-    WeatherResponse,
-)
+from app.schemas import ChatCompletionRequest, ChatCompletionResponse
 from app.upstream.base import UpstreamError
-from app.upstream.finance import fetch_quote
-from app.upstream.news import fetch_news
-from app.upstream.weather import fetch_weather
+from app.upstream.llm import fetch_chat_completion
 
 router = APIRouter(prefix="/api", tags=["gateway"])
 
@@ -32,150 +20,23 @@ def _record_upstream_latency(request: Request, latency_ms: int) -> None:
     ) + latency_ms
 
 
-@router.get("/weather/{city}", response_model=WeatherResponse)
-async def get_weather(
-    city: str,
+@router.post("/v1/chat/completions", response_model=ChatCompletionResponse)
+async def chat_completions(
     request: Request,
+    body: ChatCompletionRequest = Body(...),
     api_key: APIKey = Depends(require_api_key),
-) -> WeatherResponse:
-    settings = get_settings()
-    params = {"city": city.lower()}
+) -> ChatCompletionResponse:
+    """OpenAI-compatible chat completion, backed by NVIDIA NIM.
 
-    cached = await get_cached("weather", params)
-    if cached is not None:
-        return WeatherResponse.model_validate(cached)
-
-    try:
-        weather, latency_ms = await fetch_weather(city)
-    except UpstreamError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-
-    _record_upstream_latency(request, latency_ms)
-    await set_cached("weather", params, weather.model_dump(mode="json"), settings.cache_ttl_weather)
-    return weather
-
-
-@router.get("/news", response_model=NewsResponse)
-async def get_news(
-    request: Request,
-    topic: str = Query(..., min_length=1, max_length=128),
-    limit: int = Query(10, ge=1, le=100),
-    api_key: APIKey = Depends(require_api_key),
-) -> NewsResponse:
-    settings = get_settings()
-    params = {"topic": topic.lower(), "limit": limit}
-
-    cached = await get_cached("news", params)
-    if cached is not None:
-        return NewsResponse.model_validate(cached)
-
-    try:
-        news, latency_ms = await fetch_news(topic, limit)
-    except UpstreamError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-
-    _record_upstream_latency(request, latency_ms)
-    await set_cached("news", params, news.model_dump(mode="json"), settings.cache_ttl_news)
-    return news
-
-
-@router.get("/finance/quote", response_model=FinanceQuoteResponse)
-async def get_finance_quote(
-    request: Request,
-    symbol: str = Query(..., min_length=1, max_length=16),
-    api_key: APIKey = Depends(require_api_key),
-) -> FinanceQuoteResponse:
-    settings = get_settings()
-    params = {"symbol": symbol.upper()}
-
-    cached = await get_cached("finance", params)
-    if cached is not None:
-        return FinanceQuoteResponse.model_validate(cached)
-
-    try:
-        quote, latency_ms = await fetch_quote(symbol)
-    except UpstreamError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-
-    _record_upstream_latency(request, latency_ms)
-    await set_cached("finance", params, quote.model_dump(mode="json"), settings.cache_ttl_finance)
-    return quote
-
-
-@router.get("/aggregate", response_model=AggregateResponse)
-async def get_aggregate(
-    request: Request,
-    city: str = Query(..., min_length=1, max_length=128),
-    topic: str = Query(..., min_length=1, max_length=128),
-    limit: int = Query(5, ge=1, le=50),
-    api_key: APIKey = Depends(require_api_key),
-) -> AggregateResponse:
-    """Fan-out: fetch weather + news in parallel and combine.
-
-    The combined result is cached at the aggregate level (TTL = shortest
-    of the two constituent TTLs) so repeated identical requests skip both
-    upstream calls entirely.
+    The upstream NVIDIA_API_KEY never leaves the server — clients authenticate
+    with their Transit `af_` key, and the rate-limit middleware meters every
+    call against their tier quota. Responses are intentionally NOT cached:
+    each completion is unique and must count against the caller's quota.
     """
-    settings = get_settings()
-    aggregate_params = {"city": city.lower(), "topic": topic.lower(), "limit": limit}
+    try:
+        completion, latency_ms = await fetch_chat_completion(body)
+    except UpstreamError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-    # Check aggregate-level cache first — avoids all downstream work on hit.
-    agg_cached = await get_cached("aggregate", aggregate_params)
-    if agg_cached is not None:
-        return AggregateResponse.model_validate(agg_cached)
-
-    weather_params = {"city": city.lower()}
-    news_params = {"topic": topic.lower(), "limit": limit}
-
-    async def _weather() -> tuple[WeatherResponse | None, int, str | None]:
-        cached = await get_cached("weather", weather_params)
-        if cached is not None:
-            return WeatherResponse.model_validate(cached), 0, None
-        try:
-            result, latency = await fetch_weather(city)
-        except UpstreamError as exc:
-            return None, 0, str(exc)
-        await set_cached(
-            "weather", weather_params, result.model_dump(mode="json"), settings.cache_ttl_weather
-        )
-        return result, latency, None
-
-    async def _news() -> tuple[NewsResponse | None, int, str | None]:
-        cached = await get_cached("news", news_params)
-        if cached is not None:
-            return NewsResponse.model_validate(cached), 0, None
-        try:
-            result, latency = await fetch_news(topic, limit)
-        except UpstreamError as exc:
-            return None, 0, str(exc)
-        await set_cached(
-            "news", news_params, result.model_dump(mode="json"), settings.cache_ttl_news
-        )
-        return result, latency, None
-
-    weather_outcome, news_outcome = await asyncio.gather(_weather(), _news())
-
-    total_latency = (weather_outcome[1] or 0) + (news_outcome[1] or 0)
-    if total_latency:
-        _record_upstream_latency(request, total_latency)
-
-    errors: dict[str, str] = {}
-    if weather_outcome[2]:
-        errors["weather"] = weather_outcome[2]
-    if news_outcome[2]:
-        errors["news"] = news_outcome[2]
-
-    result = AggregateResponse(
-        city=city,
-        topic=topic,
-        weather=weather_outcome[0],
-        news=news_outcome[0],
-        errors=errors,
-    )
-
-    # Cache the combined result if both upstreams succeeded (no partial errors).
-    if not errors:
-        agg_ttl = min(settings.cache_ttl_weather, settings.cache_ttl_news)
-        await set_cached("aggregate", aggregate_params, result.model_dump(mode="json"), agg_ttl)
-
-    return result
+    _record_upstream_latency(request, latency_ms)
+    return completion

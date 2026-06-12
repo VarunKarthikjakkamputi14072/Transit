@@ -53,47 +53,35 @@ class APIKeyOut(BaseModel):
     last_used_at: Optional[datetime] = None
 
 
-# --- Gateway / unified responses ---------------------------------------------
+# --- LLM / chat completions (NVIDIA NIM backed) ------------------------------
 
 
-class WeatherResponse(BaseModel):
-    city: str
-    temperature_c: float
-    humidity_pct: float
-    condition: str
-    wind_kph: float
-    timestamp: datetime
+class ChatMessage(BaseModel):
+    role: str = Field(description="One of: system, user, assistant.")
+    content: str
 
 
-class NewsArticle(BaseModel):
-    title: str
-    summary: str
-    source: str
-    url: str
-    published_at: Optional[datetime] = None
+class ChatCompletionRequest(BaseModel):
+    messages: list[ChatMessage] = Field(min_length=1)
+    model: Optional[str] = Field(
+        default=None,
+        description="Override the gateway's default NIM model. Optional.",
+    )
+    temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=512, ge=1, le=4096)
 
 
-class NewsResponse(BaseModel):
-    articles: list[NewsArticle]
-    total: int
-    topic: str
+class ChatUsage(BaseModel):
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
 
 
-class FinanceQuoteResponse(BaseModel):
-    symbol: str
-    price: float
-    change_pct: float
-    volume: int
-    market_cap: Optional[float] = None
-    timestamp: datetime
-
-
-class AggregateResponse(BaseModel):
-    city: str
-    topic: str
-    weather: Optional[WeatherResponse] = None
-    news: Optional[NewsResponse] = None
-    errors: dict[str, str] = Field(default_factory=dict)
+class ChatCompletionResponse(BaseModel):
+    model: str
+    content: str
+    usage: ChatUsage
+    provider: str = "nvidia-nim"
 
 
 # --- Errors -------------------------------------------------------------------

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     template: "%s · Transit",
   },
   description:
-    "Transit is a developer-first API gateway that unifies weather, news, and finance APIs behind a single rate-limited, analytics-rich endpoint.",
+    "Transit is an AI gateway — a secure, rate-limited proxy for NVIDIA open LLMs. One authenticated endpoint, server-side keys, per-key quotas, and usage analytics.",
   metadataBase: new URL("https://transit.dev"),
 };
 

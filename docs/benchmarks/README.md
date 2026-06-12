@@ -1,6 +1,9 @@
-# Load Test — APIForge
+# Load Test — Transit
 
-Three scenarios that prove the performance fixes aren't theoretical.
+Measures the gateway control-plane overhead (auth → rate-limit → logging), not
+the LLM's generation time. Run with `NVIDIA_API_KEY` unset on the server so the
+chat route short-circuits to a fast 503 *after* the full middleware path runs —
+no real tokens burned, latency reflects the gateway itself.
 
 ## Setup
 
@@ -29,25 +32,22 @@ k6 run docs/benchmarks/load_test.js \
 
 | Scenario | What it finds | Fixed by |
 |---|---|---|
-| `auth_ramp` | p99 latency under 200 concurrent users — collapses without Redis key→tier cache | `middleware.py` keytier cache |
-| `stampede` | `upstream_calls_total` — should be 1 not 50 on cold cache | `cache.py` single-flight lock |
-| `sustained` | Steady-state p95 with warm caches | All fixes combined |
+| `auth_ramp` | gateway p99 under 200 concurrent users — collapses without the Redis key→tier cache | `middleware.py` keytier cache + `asyncio.to_thread` |
+| `sustained` | steady-state gateway overhead at 30 VUs | all middleware fixes combined |
 
 ## What to look for in the summary
 
 ```
-auth_latency_ms.............: p(99)=18ms   ← target <50ms (was ~340ms before fix)
-upstream_calls_total........: 1            ← stampede test: 50 VUs, 1 upstream call
-cache_hit_rate..............: 94%          ← sustained: caches working
-http_req_failed.............: 0.00%        ← circuit breaker not tripping on healthy upstream
+gateway_overhead_ms.........: p(99)=18ms   ← target <50ms (was ~340ms before fix)
+rate_limit_429_total........: >0           ← rate limiter engaging once quota is hit
+http_req_duration...........: p(95)<200ms
 ```
 
 ## Grafana
 
-Open http://localhost:3000 while the test runs — the request rate, p99 latency,
-and circuit breaker state update in real time. Screenshot the dashboard during
-`auth_ramp` (before and after the Redis cache warms up) — that's the graph that
-goes in the README.
+Open http://localhost:3000 while the test runs — request rate and p99 latency
+update in real time. Screenshot the dashboard during `auth_ramp` (before vs.
+after the Redis key→tier cache warms up) — that's the graph for the README.
 
 ## Saving results
 

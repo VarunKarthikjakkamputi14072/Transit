@@ -55,9 +55,9 @@ def create_app() -> FastAPI:
         title="Transit",
         version=__version__,
         description=(
-            "Transit is a developer API gateway that fans out to upstream services "
-            "(OpenWeather, NewsAPI, Alpha Vantage) and exposes a unified, rate-limited, "
-            "authenticated REST surface."
+            "Transit is an AI gateway that proxies NVIDIA NIM open-LLM inference "
+            "behind a unified, authenticated, rate-limited REST surface. Clients "
+            "use Transit API keys; the upstream NVIDIA key never leaves the server."
         ),
         lifespan=lifespan,
     )

@@ -34,42 +34,44 @@ async def test_peek_does_not_increment(fake_redis):
     assert snapshot2.current == 1
 
 
-def test_middleware_returns_429_after_exceeding_limit(
-    client, registered_developer, monkeypatch
-):
-    _, _, api_key = registered_developer
+def _fake_chat():
+    from app.schemas import ChatCompletionResponse, ChatUsage
 
-    async def fake_fetch_weather(city: str):
-        from datetime import datetime, timezone
-
-        from app.schemas import WeatherResponse
-
+    async def fake_fetch(req):
         return (
-            WeatherResponse(
-                city=city,
-                temperature_c=10.0,
-                humidity_pct=50.0,
-                condition="Cloudy",
-                wind_kph=5.0,
-                timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            ChatCompletionResponse(
+                model="meta/llama-3.3-70b-instruct",
+                content="ok",
+                usage=ChatUsage(),
             ),
             10,
         )
 
-    monkeypatch.setattr("app.routers.gateway.fetch_weather", fake_fetch_weather)
+    return fake_fetch
+
+
+def _chat_body() -> dict:
+    return {"messages": [{"role": "user", "content": "hi"}]}
+
+
+def test_middleware_returns_429_after_exceeding_limit(
+    client, registered_developer, monkeypatch
+):
+    _, _, api_key = registered_developer
+    monkeypatch.setattr("app.routers.gateway.fetch_chat_completion", _fake_chat())
 
     headers = {"X-API-Key": api_key}
     # FREE_TIER_REQUESTS_PER_HOUR is set to 5 in tests/conftest.py
     statuses = []
     for _ in range(6):
-        r = client.get("/api/weather/Berlin", headers=headers)
+        r = client.post("/api/v1/chat/completions", json=_chat_body(), headers=headers)
         statuses.append(r.status_code)
 
     assert statuses[:5] == [200] * 5
     assert statuses[5] == 429
 
     # Limit-exhausted request must include rate-limit + Retry-After headers
-    last = client.get("/api/weather/Berlin", headers=headers)
+    last = client.post("/api/v1/chat/completions", json=_chat_body(), headers=headers)
     assert last.status_code == 429
     body = last.json()
     assert body["error"] == "rate_limit_exceeded"
@@ -83,29 +85,11 @@ def test_rate_limit_headers_present_on_successful_response(
     client, registered_developer, monkeypatch
 ):
     _, _, api_key = registered_developer
+    monkeypatch.setattr("app.routers.gateway.fetch_chat_completion", _fake_chat())
 
-    async def fake_fetch_quote(symbol: str):
-        from datetime import datetime, timezone
-
-        from app.schemas import FinanceQuoteResponse
-
-        return (
-            FinanceQuoteResponse(
-                symbol=symbol.upper(),
-                price=1.0,
-                change_pct=0.0,
-                volume=0,
-                market_cap=None,
-                timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc),
-            ),
-            5,
-        )
-
-    monkeypatch.setattr("app.routers.gateway.fetch_quote", fake_fetch_quote)
-
-    response = client.get(
-        "/api/finance/quote",
-        params={"symbol": "msft"},
+    response = client.post(
+        "/api/v1/chat/completions",
+        json=_chat_body(),
         headers={"X-API-Key": api_key},
     )
     assert response.status_code == 200

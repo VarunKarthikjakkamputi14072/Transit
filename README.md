@@ -3,31 +3,30 @@
 **Portal:** https://apiforge-portal.vercel.app  
 **API:** https://apiforge-jnwp.onrender.com
 
-Transit is a developer-facing API gateway that unifies third-party APIs
-(OpenWeather · NewsAPI · Alpha Vantage) behind one rate-limited, authenticated,
-analytics-rich REST endpoint — plus a Next.js developer portal to manage keys,
-explore requests, and visualize usage.
+Transit is an **AI gateway**: a secure, rate-limited proxy for NVIDIA's open
+LLMs (via [build.nvidia.com](https://build.nvidia.com) / NIM). Client apps
+authenticate with a Transit `af_` key and call one OpenAI-compatible endpoint —
+the upstream NVIDIA key never leaves the server, every call is metered against a
+per-key quota, and all traffic is logged for analytics. Ships with a Next.js
+developer portal to generate keys, try prompts, and visualize usage.
 
 ```
-Developer/Client
+Developer/Client app
+    ↓  (X-API-Key: af_...)
+Next.js Developer Portal (key gen, prompt explorer, analytics, docs)
     ↓
-Next.js Developer Portal (key management, explorer, analytics, docs)
-    ↓
-FastAPI Gateway
-    ↓
-Redis (rate limiting + response caching)
-    ↓
-PostgreSQL (API keys, usage logs, analytics)
-    ↓
-Upstream APIs: OpenWeather | NewsAPI | Alpha Vantage
+FastAPI Gateway  ──  Redis (per-key sliding-window rate limiting)
+    ↓                PostgreSQL (API keys, usage logs, analytics)
+    ↓  (Authorization: Bearer <server-side NVIDIA key>)
+NVIDIA NIM — OpenAI-compatible /v1/chat/completions (Llama 3.3 70B, etc.)
 ```
 
 This monorepo contains both stacks:
 
 | Stack | Path | Purpose |
 | --- | --- | --- |
-| **Gateway** | `app/`, `tests/` | FastAPI + SQLAlchemy + Redis + httpx — the API itself (auth, rate limiting, caching, analytics, normalization). |
-| **Developer portal** | [`web/`](./web/README.md) | Next.js 14 + Tailwind dashboard — landing, dashboard, interactive explorer, analytics, docs. |
+| **Gateway** | `app/`, `tests/` | FastAPI + SQLAlchemy + Redis + httpx — auth, per-key rate limiting, NIM proxying, usage analytics. |
+| **Developer portal** | [`web/`](./web/README.md) | Next.js 14 + Tailwind dashboard — landing, dashboard, prompt explorer, analytics, docs. |
 
 ---
 
@@ -39,20 +38,16 @@ This monorepo contains both stacks:
   - `POST /auth/register` — creates a developer account and returns a freshly minted API key prefixed with `af_` (stored hashed via HMAC-SHA256, password hashed with bcrypt).
   - `POST /auth/login` — returns a JWT (`python-jose`, HS256).
   - `GET /auth/me`, `GET /auth/keys` — inspect the current developer / their keys (requires `X-API-Key`).
-- **Gateway routes** (require `X-API-Key`)
-  - `GET /api/weather/{city}` — OpenWeather, normalized to `{city, temperature_c, humidity_pct, condition, wind_kph, timestamp}`.
-  - `GET /api/news?topic={topic}&limit={n}` — NewsAPI, normalized to `{articles: [{title, summary, source, url, published_at}], total, topic}`.
-  - `GET /api/finance/quote?symbol={ticker}` — Alpha Vantage, normalized to `{symbol, price, change_pct, volume, market_cap, timestamp}`.
-  - `GET /api/aggregate?city={city}&topic={topic}` — fan-out: calls weather + news in parallel using `asyncio.gather` and returns a combined response (partial failures are reported in `errors`).
-- **Rate limiting** (Redis)
-  - Configurable per-tier limits, defaults to **100 req/hour** for the `free` tier.
+- **AI gateway route** (requires `X-API-Key`)
+  - `POST /api/v1/chat/completions` — OpenAI-compatible chat completion, proxied to NVIDIA NIM. Body: `{messages: [{role, content}], model?, temperature?, max_tokens?}`. Returns `{model, content, usage: {prompt_tokens, completion_tokens, total_tokens}, provider}`.
+  - The upstream `NVIDIA_API_KEY` is injected server-side as an `Authorization: Bearer` header — clients never see it.
+  - Intentionally **not cached**: every completion is unique and must count against the caller's quota.
+- **Rate limiting** (Redis) — the core of the "AI gateway" value
+  - Per-key sliding-window limits, defaults to **100 req/hour** (`free`) / **5000** (`pro`).
   - Redis key pattern: `ratelimit:{api_key}:{hour_bucket}`.
-  - Returns `429` with `retry_after_seconds` when exceeded, plus `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers on every `/api/*` response.
-- **Caching** (Redis)
-  - Weather: **10 min**, News: **5 min**, Finance: **1 min** (overridable via env vars).
-  - Cache key pattern: `cache:{route}:{params_hash}` (SHA-256 of normalized JSON params).
+  - Returns `429` with `retry_after_seconds` when exceeded, plus `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers on every `/api/*` response. Fails open if Redis is briefly unreachable.
 - **Usage analytics**
-  - Every `/api/*` request is logged to `request_logs` (endpoint, params, response_time_ms, status_code, upstream_latency_ms) via Starlette middleware.
+  - Every `/api/*` request is logged to `request_logs` (endpoint, response_time_ms, status_code, upstream_latency_ms) via Starlette middleware, exposed at `GET /api/analytics/usage`.
 
 ### Stack
 
@@ -70,17 +65,15 @@ app/
   security.py        # password hashing, API key gen, JWT
   deps.py            # FastAPI dependencies (API-key resolution)
   redis_client.py    # async Redis client (override-able for tests)
-  rate_limit.py      # Redis-backed hourly limiter
-  cache.py           # Redis-backed response cache
+  rate_limit.py      # Redis-backed sliding-window hourly limiter
   middleware.py      # /api/* rate-limit + request logging middleware
   routers/
     auth.py          # /auth/*
-    gateway.py       # /api/*
+    gateway.py       # /api/v1/chat/completions
+    analytics.py     # /api/analytics/usage
   upstream/
-    base.py          # shared async httpx client
-    weather.py       # OpenWeather + normalization
-    news.py          # NewsAPI + normalization
-    finance.py       # Alpha Vantage + normalization
+    base.py          # shared async httpx client + circuit breaker
+    llm.py           # NVIDIA NIM chat-completions client
 tests/               # pytest test suite (uses SQLite + fakeredis)
 docker-compose.yml   # Postgres + Redis + app
 Dockerfile
@@ -94,7 +87,7 @@ requirements.txt
 # 1. Install
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env  # fill in upstream API keys + SECRET_KEY
+cp .env.example .env  # set NVIDIA_API_KEY (from build.nvidia.com) + SECRET_KEY
 
 # 2. Run dependencies (Postgres + Redis)
 docker compose up -d postgres redis
@@ -112,9 +105,11 @@ curl -s -X POST http://localhost:8000/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"email":"you@example.com","password":"supersecret123"}'
 
-# Use the returned api_key
-curl -s http://localhost:8000/api/weather/Berlin \
-  -H 'X-API-Key: af_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' | jq
+# Use the returned api_key to call an open LLM through the gateway
+curl -s -X POST http://localhost:8000/api/v1/chat/completions \
+  -H 'X-API-Key: af_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+  -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"Write a python script that pings a URL"}]}' | jq
 ```
 
 ### Configuration
@@ -127,9 +122,10 @@ All settings are loaded from environment variables (see `.env.example`):
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis connection URL |
 | `SECRET_KEY` | dev-only placeholder | Used for JWT signing and API-key HMAC pepper |
 | `JWT_ALGORITHM` / `JWT_EXPIRE_MINUTES` | `HS256` / `60` | JWT issuance |
-| `OPENWEATHER_API_KEY` / `NEWSAPI_API_KEY` / `ALPHAVANTAGE_API_KEY` | empty | Upstream credentials |
+| `NVIDIA_API_KEY` | empty | Server-side NVIDIA NIM key (from build.nvidia.com) |
+| `NVIDIA_BASE_URL` | `https://integrate.api.nvidia.com/v1` | NIM inference base URL |
+| `NVIDIA_MODEL` | `meta/llama-3.3-70b-instruct` | Default model for chat completions |
 | `FREE_TIER_REQUESTS_PER_HOUR` / `PRO_TIER_REQUESTS_PER_HOUR` | `100` / `5000` | Seeded into `rate_limit_config` on startup |
-| `CACHE_TTL_WEATHER` / `CACHE_TTL_NEWS` / `CACHE_TTL_FINANCE` | `600` / `300` / `60` | Cache TTLs in seconds |
 | `UPSTREAM_TIMEOUT_SECONDS` | `10` | `httpx` per-request timeout |
 
 ### Database schema
@@ -151,7 +147,7 @@ The suite uses a per-test SQLite database and `fakeredis` so it has no external 
 pytest -q
 ```
 
-24 tests covering auth, normalization, gateway routes, rate-limiter logic, and middleware integration.
+Tests cover auth, the chat-completions route (with a mocked NIM upstream), rate-limiter logic, and middleware integration.
 
 ### Security notes
 
@@ -164,23 +160,26 @@ pytest -q
 
 ## Performance
 
-I load-tested the gateway with [k6](https://k6.io) against three scenarios: auth ramp (0→200 concurrent users), cache stampede (50 VUs hitting the same cold key simultaneously), and sustained mixed traffic. The test script is at [`docs/benchmarks/load_test.js`](./docs/benchmarks/load_test.js).
+The gateway's control plane (auth, rate limiting, logging) was load-tested with
+[k6](https://k6.io) against a fast stub upstream so the numbers reflect the
+gateway overhead itself — not the LLM's generation time. (Real chat completions
+are dominated by NIM latency, ~1s+, which is upstream and not what the gateway
+is responsible for.) The test script is at [`docs/benchmarks/load_test.js`](./docs/benchmarks/load_test.js).
 
 ### Results (200 peak VUs, 4 uvicorn workers)
 
 | Metric | Result |
 |---|---|
 | Throughput | **276 req/s** sustained |
-| Median response time | **45ms** |
-| p95 response time | 325ms |
-| Cache hit rate | **54.6%** (warm caches higher) |
+| Median gateway overhead | **45ms** |
+| p95 | 325ms |
 | Total requests handled | 63,559 |
 
 ### What the test found and how it was fixed
 
 **Problem 1 — Synchronous DB writes blocking the event loop**
 
-The request logger (`_persist_log`) was opening a sync SQLAlchemy session and committing on the event loop for every `/api/*` request. Under 200 concurrent users this stacked 200 blocking DB commits — the event loop froze and every request timed out at 60s.
+The request logger was opening a sync SQLAlchemy session and committing on the event loop for every `/api/*` request. Under 200 concurrent users this stacked 200 blocking DB commits — the event loop froze and every request timed out at 60s.
 
 Fix: all sync DB work now runs in `asyncio.to_thread()`. Logging is fire-and-forget via `loop.create_task(asyncio.to_thread(...))` — the response is returned to the client before the log write starts.
 
@@ -190,11 +189,11 @@ Every request hit Postgres to resolve API key → developer tier, even for the s
 
 Fix: a Redis key→tier cache (`keytier:<hash>`, 60s TTL) means the DB is only hit once per key per minute. Subsequent requests resolve tier from Redis in under 1ms.
 
-**Problem 3 — Cache stampede on cold keys**
+**Problem 3 — A Redis blip took down the whole gateway**
 
-When 50 concurrent requests all missed the same cache key, 50 upstream calls went out simultaneously.
+The rate limiter wasn't fault-tolerant: when Redis was briefly unreachable it raised and every request 500'd.
 
-Fix: single-flight lock via Redis `SET NX` — only one caller fetches the upstream value, the rest wait and read the populated cache. `upstream_calls_total` in the k6 summary drops from 50 to 1 on a cold key.
+Fix: the limiter now fails open — a Redis outage degrades to "no limiting" for that request rather than a total outage, and the call is still served.
 
 To run the load test yourself:
 

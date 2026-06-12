@@ -17,9 +17,7 @@ from pathlib import Path
 # Default to safe in-process settings BEFORE app modules import.
 os.environ.setdefault("APIFORGE_ENV", "test")
 os.environ.setdefault("SECRET_KEY", "test-secret-please-change")
-os.environ.setdefault("OPENWEATHER_API_KEY", "test-openweather")
-os.environ.setdefault("NEWSAPI_API_KEY", "test-newsapi")
-os.environ.setdefault("ALPHAVANTAGE_API_KEY", "test-alphavantage")
+os.environ.setdefault("NVIDIA_API_KEY", "test-nvidia")
 os.environ.setdefault("FREE_TIER_REQUESTS_PER_HOUR", "5")
 
 # Ensure repo root is importable.

@@ -32,9 +32,15 @@ class Settings(BaseSettings):
 
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
 
-    openweather_api_key: str = Field(default="", alias="OPENWEATHER_API_KEY")
-    newsapi_api_key: str = Field(default="", alias="NEWSAPI_API_KEY")
-    alphavantage_api_key: str = Field(default="", alias="ALPHAVANTAGE_API_KEY")
+    # NVIDIA NIM (build.nvidia.com) — OpenAI-compatible inference backend for the
+    # gateway's /api/v1/chat/completions route.
+    nvidia_api_key: str = Field(default="", alias="NVIDIA_API_KEY")
+    nvidia_base_url: str = Field(
+        default="https://integrate.api.nvidia.com/v1", alias="NVIDIA_BASE_URL"
+    )
+    nvidia_model: str = Field(
+        default="meta/llama-3.3-70b-instruct", alias="NVIDIA_MODEL"
+    )
 
     free_tier_requests_per_hour: int = Field(
         default=100, alias="FREE_TIER_REQUESTS_PER_HOUR"
@@ -42,10 +48,6 @@ class Settings(BaseSettings):
     pro_tier_requests_per_hour: int = Field(
         default=5000, alias="PRO_TIER_REQUESTS_PER_HOUR"
     )
-
-    cache_ttl_weather: int = Field(default=600, alias="CACHE_TTL_WEATHER")
-    cache_ttl_news: int = Field(default=300, alias="CACHE_TTL_NEWS")
-    cache_ttl_finance: int = Field(default=60, alias="CACHE_TTL_FINANCE")
 
     upstream_timeout_seconds: float = Field(default=10.0, alias="UPSTREAM_TIMEOUT_SECONDS")
 

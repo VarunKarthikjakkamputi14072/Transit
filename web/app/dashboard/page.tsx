@@ -8,7 +8,7 @@ import { CodeSnippet } from "@/components/CodeSnippet";
 import { UsageChart } from "@/components/UsageChart";
 import { useApiKey } from "@/lib/apiKey";
 import { mockUsage } from "@/lib/mock";
-import { buildLanguageSnippets } from "@/lib/snippets";
+import { buildChatSnippets } from "@/lib/snippets";
 import { API_BASE_URL, HAS_LIVE_BACKEND, fetchUsage, registerDeveloper } from "@/lib/api";
 
 export default function DashboardPage() {
@@ -50,15 +50,9 @@ export default function DashboardPage() {
   const baseUrlForSnippets = HAS_LIVE_BACKEND ? API_BASE_URL : "https://api.transitapi.dev";
   const snippetKey = apiKey || "af_your_key_here";
 
-  const weatherSnippets = buildLanguageSnippets({
+  const chatSnippets = buildChatSnippets({
     baseUrl: baseUrlForSnippets,
     apiKey: snippetKey,
-    path: "/api/weather/Berlin",
-  });
-  const aggregateSnippets = buildLanguageSnippets({
-    baseUrl: baseUrlForSnippets,
-    apiKey: snippetKey,
-    path: "/api/aggregate?city=Tokyo&topic=ai",
   });
 
   const showEmptyState = hydrated && !apiKey;
@@ -143,9 +137,11 @@ export default function DashboardPage() {
             All endpoints <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <CodeSnippet title="GET /api/weather/{city}" tabs={weatherSnippets} />
-          <CodeSnippet title="GET /api/aggregate" tabs={aggregateSnippets} />
+        <div className="grid gap-6">
+          <CodeSnippet
+            title="POST /api/v1/chat/completions"
+            tabs={chatSnippets}
+          />
         </div>
       </section>
     </div>

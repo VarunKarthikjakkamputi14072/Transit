@@ -1,92 +1,108 @@
-import type { EndpointId } from "./types";
-
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_APIFORGE_BASE_URL?.replace(/\/$/, "") ?? "";
 
 export const HAS_LIVE_BACKEND = API_BASE_URL.length > 0;
 
-export type ApiResult<T> = {
+export type ChatTurn = { role: "system" | "user" | "assistant"; content: string };
+
+export type ChatResult = {
   ok: boolean;
   status: number;
   latencyMs: number;
-  data: T | null;
-  raw: unknown;
+  content: string;
+  model: string;
+  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  rateLimit: { limit: number | null; remaining: number | null };
   error?: string;
 };
 
-const ENDPOINT_PATHS: Record<EndpointId, (params: Record<string, string>) => string> = {
-  weather: (p) => `/api/weather/${encodeURIComponent(p.city || "Berlin")}`,
-  news: (p) => {
-    const q = new URLSearchParams({ topic: p.topic || "ai", limit: p.limit || "5" });
-    return `/api/news?${q.toString()}`;
-  },
-  finance: (p) => {
-    const q = new URLSearchParams({ symbol: p.symbol || "AAPL" });
-    return `/api/finance/quote?${q.toString()}`;
-  },
-  aggregate: (p) => {
-    const q = new URLSearchParams({
-      city: p.city || "Berlin",
-      topic: p.topic || "ai",
-    });
-    return `/api/aggregate?${q.toString()}`;
-  },
-};
-
-export function buildPath(endpoint: EndpointId, params: Record<string, string>): string {
-  return ENDPOINT_PATHS[endpoint](params);
-}
-
-export async function callEndpoint<T = unknown>(
-  endpoint: EndpointId,
-  params: Record<string, string>,
+/**
+ * Call the gateway's NVIDIA-NIM-backed chat completion endpoint.
+ * Returns the assistant message plus the X-RateLimit-* headers so the UI can
+ * show the caller's quota dropping with every request.
+ */
+export async function callChat(
+  messages: ChatTurn[],
   apiKey: string,
-): Promise<ApiResult<T>> {
-  const path = buildPath(endpoint, params);
+  opts?: { temperature?: number; maxTokens?: number },
+): Promise<ChatResult> {
+  const empty: ChatResult = {
+    ok: false,
+    status: 0,
+    latencyMs: 0,
+    content: "",
+    model: "",
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    rateLimit: { limit: null, remaining: null },
+  };
+
   if (!HAS_LIVE_BACKEND) {
     return {
-      ok: false,
-      status: 0,
-      latencyMs: 0,
-      data: null,
-      raw: null,
+      ...empty,
       error:
         "Live backend not configured. Set NEXT_PUBLIC_APIFORGE_BASE_URL to call the gateway.",
     };
   }
 
-  const url = `${API_BASE_URL}${path}`;
   const started = performance.now();
   try {
-    const response = await fetch(url, {
-      headers: apiKey ? { "X-API-Key": apiKey } : undefined,
+    const response = await fetch(`${API_BASE_URL}/api/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { "X-API-Key": apiKey } : {}),
+      },
       cache: "no-store",
+      body: JSON.stringify({
+        messages,
+        temperature: opts?.temperature ?? 0.2,
+        max_tokens: opts?.maxTokens ?? 512,
+      }),
     });
     const latencyMs = Math.round(performance.now() - started);
+    const limitH = response.headers.get("X-RateLimit-Limit");
+    const remainingH = response.headers.get("X-RateLimit-Remaining");
     const text = await response.text();
-    let parsed: unknown = null;
+    let parsed: Record<string, unknown> = {};
     try {
-      parsed = text ? JSON.parse(text) : null;
+      parsed = text ? JSON.parse(text) : {};
     } catch {
-      parsed = text;
+      parsed = {};
     }
+
+    if (!response.ok) {
+      return {
+        ...empty,
+        status: response.status,
+        latencyMs,
+        rateLimit: {
+          limit: limitH ? Number(limitH) : null,
+          remaining: remainingH ? Number(remainingH) : null,
+        },
+        error:
+          (parsed.detail as string) ||
+          (parsed.error as string) ||
+          `Gateway returned ${response.status}`,
+      };
+    }
+
+    const usage = (parsed.usage as ChatResult["usage"]) ?? empty.usage;
     return {
-      ok: response.ok,
+      ok: true,
       status: response.status,
       latencyMs,
-      data: response.ok ? (parsed as T) : null,
-      raw: parsed,
-      error: response.ok
-        ? undefined
-        : `Upstream returned ${response.status}`,
+      content: String(parsed.content ?? ""),
+      model: String(parsed.model ?? ""),
+      usage,
+      rateLimit: {
+        limit: limitH ? Number(limitH) : null,
+        remaining: remainingH ? Number(remainingH) : null,
+      },
     };
   } catch (err) {
     return {
-      ok: false,
-      status: 0,
+      ...empty,
       latencyMs: Math.round(performance.now() - started),
-      data: null,
-      raw: null,
       error: err instanceof Error ? err.message : "Unknown network error",
     };
   }

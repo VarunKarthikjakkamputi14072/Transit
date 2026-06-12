@@ -4,8 +4,8 @@ import { useMemo } from "react";
 import { CodeSnippet } from "@/components/CodeSnippet";
 import { API_BASE_URL, HAS_LIVE_BACKEND } from "@/lib/api";
 import { useApiKey } from "@/lib/apiKey";
-import { MOCK_API_KEY, mockAggregate, mockFinance, mockNews, mockWeather } from "@/lib/mock";
-import { buildLanguageSnippets } from "@/lib/snippets";
+import { MOCK_API_KEY, mockChatCompletion } from "@/lib/mock";
+import { buildChatSnippets, buildLanguageSnippets } from "@/lib/snippets";
 
 type EndpointDoc = {
   id: string;
@@ -27,65 +27,20 @@ export default function DocsPage() {
   const endpoints: EndpointDoc[] = useMemo(
     () => [
       {
-        id: "weather",
-        method: "GET",
-        path: "/api/weather/{city}",
-        templatePath: "/api/weather/{city}",
+        id: "chat",
+        method: "POST",
+        path: "/api/v1/chat/completions",
+        templatePath: "/api/v1/chat/completions",
         summary:
-          "Fetch current weather conditions for a city. Cached for 10 minutes per city (case-insensitive).",
+          "OpenAI-compatible chat completion, proxied to NVIDIA NIM open models. Authenticate with your Transit key — the upstream NVIDIA key never leaves the server. Every call is metered against your tier quota.",
         params: [
-          {
-            name: "city",
-            in: "path",
-            type: "string",
-            required: true,
-            description: "City name (e.g. Berlin, San Francisco).",
-          },
+          { name: "messages", in: "query", type: "array", required: true, description: "Chat history: [{role, content}] — roles: system, user, assistant (request body)." },
+          { name: "model", in: "query", type: "string", required: false, description: "Override the default NIM model (meta/llama-3.3-70b-instruct)." },
+          { name: "temperature", in: "query", type: "float", required: false, description: "0.0–2.0, default 0.2." },
+          { name: "max_tokens", in: "query", type: "integer", required: false, description: "1–4096, default 512." },
         ],
-        example: () => mockWeather("Berlin"),
-        callPath: "/api/weather/Berlin",
-      },
-      {
-        id: "news",
-        method: "GET",
-        path: "/api/news",
-        templatePath: "/api/news?topic={topic}&limit={limit}",
-        summary:
-          "Search recent news articles by topic. Cached for 5 minutes per (topic, limit) pair.",
-        params: [
-          { name: "topic", in: "query", type: "string", required: true, description: "Search query (e.g. ai, climate)." },
-          { name: "limit", in: "query", type: "integer", required: false, description: "Max articles to return (1-100, default 10)." },
-        ],
-        example: () => mockNews("ai", 3),
-        callPath: "/api/news?topic=ai&limit=3",
-      },
-      {
-        id: "finance",
-        method: "GET",
-        path: "/api/finance/quote",
-        templatePath: "/api/finance/quote?symbol={symbol}",
-        summary:
-          "Current stock quote for a ticker symbol. Cached for 1 minute per symbol.",
-        params: [
-          { name: "symbol", in: "query", type: "string", required: true, description: "Stock ticker (e.g. AAPL, MSFT)." },
-        ],
-        example: () => mockFinance("AAPL"),
-        callPath: "/api/finance/quote?symbol=AAPL",
-      },
-      {
-        id: "aggregate",
-        method: "GET",
-        path: "/api/aggregate",
-        templatePath: "/api/aggregate?city={city}&topic={topic}",
-        summary:
-          "Fan-out: call weather + news in parallel via asyncio.gather and combine the responses. Partial failures are returned in the errors object.",
-        params: [
-          { name: "city", in: "query", type: "string", required: true, description: "City for weather lookup." },
-          { name: "topic", in: "query", type: "string", required: true, description: "Topic for news search." },
-          { name: "limit", in: "query", type: "integer", required: false, description: "Max news articles (1-50, default 5)." },
-        ],
-        example: () => mockAggregate("Tokyo", "tech"),
-        callPath: "/api/aggregate?city=Tokyo&topic=tech",
+        example: () => mockChatCompletion(),
+        callPath: "/api/v1/chat/completions",
       },
     ],
     [],
@@ -310,7 +265,9 @@ const { api_key } = await res.json();
 console.log(api_key);`,
         },
       ]
-    : buildLanguageSnippets({ baseUrl, apiKey, path: doc.callPath });
+    : doc.method === "POST"
+      ? buildChatSnippets({ baseUrl, apiKey })
+      : buildLanguageSnippets({ baseUrl, apiKey, path: doc.callPath });
 
   return (
     <article id={doc.id} className="scroll-mt-24 panel">

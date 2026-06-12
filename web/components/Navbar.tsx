@@ -8,6 +8,7 @@ import { Github } from "lucide-react";
 const NAV_LINKS: { href: string; label: string }[] = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/explorer", label: "Explorer" },
+  { href: "/chat", label: "AI Chat" },
   { href: "/analytics", label: "Analytics" },
   { href: "/docs", label: "Docs" },
 ];

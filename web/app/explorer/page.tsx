@@ -7,382 +7,230 @@ import { useApiKey } from "@/lib/apiKey";
 import {
   API_BASE_URL,
   HAS_LIVE_BACKEND,
-  buildPath,
-  callEndpoint,
-  type ApiResult,
+  callChat,
+  type ChatResult,
 } from "@/lib/api";
-import {
-  mockAggregate,
-  mockFinance,
-  mockNews,
-  mockRawUpstream,
-  mockWeather,
-} from "@/lib/mock";
-import type { EndpointId } from "@/lib/types";
-import { buildLanguageSnippets } from "@/lib/snippets";
+import { MOCK_API_KEY } from "@/lib/mock";
+import { buildChatSnippets } from "@/lib/snippets";
 
-type ParamField = {
-  name: string;
-  label: string;
-  placeholder: string;
-  defaultValue: string;
-  required?: boolean;
-};
-
-const ENDPOINTS: Record<
-  EndpointId,
-  {
-    id: EndpointId;
-    method: "GET";
-    label: string;
-    description: string;
-    template: string;
-    params: ParamField[];
-  }
-> = {
-  weather: {
-    id: "weather",
-    method: "GET",
-    label: "/api/weather/{city}",
-    description:
-      "Fetch current weather for a city and normalize to Transit's unified schema.",
-    template: "/api/weather/{city}",
-    params: [
-      {
-        name: "city",
-        label: "City",
-        placeholder: "Berlin",
-        defaultValue: "Berlin",
-        required: true,
-      },
-    ],
-  },
-  news: {
-    id: "news",
-    method: "GET",
-    label: "/api/news",
-    description: "Search recent news articles by topic.",
-    template: "/api/news?topic={topic}&limit={limit}",
-    params: [
-      {
-        name: "topic",
-        label: "Topic",
-        placeholder: "ai",
-        defaultValue: "ai",
-        required: true,
-      },
-      {
-        name: "limit",
-        label: "Limit (1-100)",
-        placeholder: "5",
-        defaultValue: "5",
-      },
-    ],
-  },
-  finance: {
-    id: "finance",
-    method: "GET",
-    label: "/api/finance/quote",
-    description: "Fetch a real-time stock quote by ticker symbol.",
-    template: "/api/finance/quote?symbol={symbol}",
-    params: [
-      {
-        name: "symbol",
-        label: "Symbol",
-        placeholder: "AAPL",
-        defaultValue: "AAPL",
-        required: true,
-      },
-    ],
-  },
-  aggregate: {
-    id: "aggregate",
-    method: "GET",
-    label: "/api/aggregate",
-    description:
-      "Fan-out: fetch weather + news in parallel and return a single combined response.",
-    template: "/api/aggregate?city={city}&topic={topic}",
-    params: [
-      {
-        name: "city",
-        label: "City",
-        placeholder: "Tokyo",
-        defaultValue: "Tokyo",
-        required: true,
-      },
-      {
-        name: "topic",
-        label: "Topic",
-        placeholder: "tech",
-        defaultValue: "tech",
-        required: true,
-      },
-    ],
-  },
-};
-
-const ENDPOINT_ORDER: EndpointId[] = ["weather", "news", "finance", "aggregate"];
+const SAMPLE_PROMPTS = [
+  "Write a python script that pings a URL and prints the latency.",
+  "Explain what an API gateway does in two sentences.",
+  "Write a SQL query that finds the top 5 endpoints by request count.",
+];
 
 export default function ExplorerPage() {
   const { apiKey, hydrated } = useApiKey();
-  const [selected, setSelected] = useState<EndpointId>("weather");
-  const [params, setParams] = useState<Record<string, string>>(() =>
-    Object.fromEntries(ENDPOINTS.weather.params.map((p) => [p.name, p.defaultValue])),
-  );
-  const [normalized, setNormalized] = useState<unknown>(null);
-  const [raw, setRaw] = useState<unknown>(null);
-  const [meta, setMeta] = useState<{
-    status: number;
-    latency: number;
-    source: "live" | "mock";
-    error?: string;
-  } | null>(null);
+  const [prompt, setPrompt] = useState(SAMPLE_PROMPTS[0]);
+  const [temperature, setTemperature] = useState("0.2");
+  const [maxTokens, setMaxTokens] = useState("512");
   const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<ChatResult | null>(null);
 
-  const endpoint = ENDPOINTS[selected];
-  const path = useMemo(() => buildPath(selected, params), [selected, params]);
+  const effectiveKey = hydrated && apiKey ? apiKey : "";
+  const baseUrl = HAS_LIVE_BACKEND ? API_BASE_URL : "https://api.transitapi.dev";
 
-  const handleSelect = (id: EndpointId) => {
-    setSelected(id);
-    setParams(
-      Object.fromEntries(ENDPOINTS[id].params.map((p) => [p.name, p.defaultValue])),
-    );
-    setNormalized(null);
-    setRaw(null);
-    setMeta(null);
-  };
+  const snippets = useMemo(
+    () =>
+      buildChatSnippets({
+        baseUrl,
+        apiKey: effectiveKey || MOCK_API_KEY,
+      }),
+    [baseUrl, effectiveKey],
+  );
 
-  const handleSend = async () => {
+  async function run() {
+    if (!prompt.trim() || loading) return;
     setLoading(true);
-    const t0 = performance.now();
-    if (HAS_LIVE_BACKEND && apiKey) {
-      const result: ApiResult<unknown> = await callEndpoint(selected, params, apiKey);
-      setNormalized(result.data ?? result.raw);
-      setRaw({ note: "Live mode shows the gateway response only. Run the Python script in /docs to see raw upstream JSON.", gateway_response: result.raw });
-      setMeta({
-        status: result.status,
-        latency: result.latencyMs,
-        source: "live",
-        error: result.error,
-      });
-    } else {
-      await new Promise((r) => setTimeout(r, 280));
-      let mock: unknown;
-      switch (selected) {
-        case "weather":
-          mock = mockWeather(params.city || "Berlin");
-          break;
-        case "news":
-          mock = mockNews(params.topic || "ai", Number(params.limit || 5));
-          break;
-        case "finance":
-          mock = mockFinance(params.symbol || "AAPL");
-          break;
-        case "aggregate":
-          mock = mockAggregate(params.city || "Tokyo", params.topic || "tech");
-          break;
-      }
-      setNormalized(mock);
-      setRaw(mockRawUpstream(selected, params));
-      setMeta({
-        status: 200,
-        latency: Math.round(performance.now() - t0),
-        source: "mock",
-      });
-    }
+    const res = await callChat(
+      [{ role: "user", content: prompt.trim() }],
+      effectiveKey,
+      {
+        temperature: Number(temperature) || 0.2,
+        maxTokens: Number(maxTokens) || 512,
+      },
+    );
+    setResult(res);
     setLoading(false);
-  };
-
-  const baseUrlForSnippets = HAS_LIVE_BACKEND ? API_BASE_URL : "https://api.transitapi.dev";
-  const snippets = buildLanguageSnippets({
-    baseUrl: baseUrlForSnippets,
-    apiKey: hydrated ? apiKey : "af_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-    path,
-  });
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
       <header className="flex flex-col gap-2">
         <div className="section-title">Explorer</div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-50">API Explorer</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-50">
+          Try the AI gateway
+        </h1>
         <p className="max-w-2xl text-sm text-slate-400">
-          Fire requests at the gateway, inspect the normalized response, and
-          compare it to what the upstream returned.
+          Send a prompt to <span className="mono">POST /api/v1/chat/completions</span>.
+          Transit forwards it to NVIDIA NIM with the server-side key, meters the
+          call against your quota, and returns the completion with rate-limit
+          headers.
         </p>
       </header>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[280px,1fr]">
-        {/* Endpoint list */}
-        <aside className="panel h-fit">
-          <div className="panel-header">
-            <h2 className="text-sm font-semibold text-slate-100">Endpoints</h2>
-          </div>
-          <ul className="p-2">
-            {ENDPOINT_ORDER.map((id) => {
-              const item = ENDPOINTS[id];
-              const active = selected === id;
-              return (
-                <li key={id}>
-                  <button
-                    type="button"
-                    onClick={() => handleSelect(id)}
-                    className={`flex w-full flex-col gap-1 rounded-md px-3 py-2 text-left transition ${
-                      active
-                        ? "bg-terminal-bg ring-1 ring-terminal-accent/50"
-                        : "hover:bg-terminal-bg/60"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="badge bg-emerald-500/15 text-emerald-300">
-                        {item.method}
-                      </span>
-                      <span className="mono text-sm text-slate-100">{item.label}</span>
-                    </div>
-                    <span className="text-xs text-slate-500">{item.description}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </aside>
+      {!HAS_LIVE_BACKEND && (
+        <div className="mt-6 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          <strong className="font-semibold">Demo mode.</strong>{" "}
+          <span className="text-amber-200/90">
+            Set <span className="mono">NEXT_PUBLIC_APIFORGE_BASE_URL</span> to call
+            the live gateway.
+          </span>
+        </div>
+      )}
 
-        {/* Builder + response */}
-        <div className="space-y-6">
-          <section className="panel">
-            <div className="panel-header">
-              <div className="flex items-center gap-2">
-                <Terminal className="h-4 w-4 text-terminal-accent" />
-                <span className="mono text-sm text-slate-100">
-                  GET {path}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={handleSend}
-                disabled={loading}
-                className="btn-primary"
-              >
-                <Play className="h-3.5 w-3.5" />
-                {loading ? "Sending…" : "Send"}
-              </button>
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        {/* Request panel */}
+        <section className="panel">
+          <header className="panel-header">
+            <div className="flex items-center gap-2">
+              <span className="badge mono bg-sky-500/15 text-sky-300">POST</span>
+              <span className="mono text-sm text-slate-100">
+                /api/v1/chat/completions
+              </span>
             </div>
-            <div className="grid gap-4 p-4 sm:grid-cols-2">
-              {endpoint.params.map((p) => (
-                <div key={p.name}>
-                  <label className="label" htmlFor={p.name}>
-                    {p.label}
-                    {p.required && (
-                      <span className="ml-1 text-terminal-accent">*</span>
-                    )}
-                  </label>
-                  <input
-                    id={p.name}
-                    value={params[p.name] ?? ""}
-                    onChange={(e) =>
-                      setParams((prev) => ({ ...prev, [p.name]: e.target.value }))
-                    }
-                    placeholder={p.placeholder}
-                    className="input mono"
-                  />
-                </div>
-              ))}
-              <div className="sm:col-span-2">
-                <label className="label">X-API-Key</label>
+          </header>
+          <div className="space-y-4 px-4 py-4">
+            <div>
+              <label className="label mb-1 block" htmlFor="prompt">
+                Prompt
+              </label>
+              <textarea
+                id="prompt"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                rows={5}
+                className="w-full rounded-md border border-terminal-border bg-terminal-bg px-3 py-2 text-sm text-slate-100 outline-none focus:border-terminal-accent"
+                placeholder="Write a python script that..."
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                {SAMPLE_PROMPTS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setPrompt(s)}
+                    className="rounded-full border border-terminal-border px-3 py-1 text-xs text-slate-400 transition hover:border-terminal-accent hover:text-terminal-accent"
+                  >
+                    {s.length > 44 ? `${s.slice(0, 44)}…` : s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label mb-1 block" htmlFor="temperature">
+                  Temperature (0–2)
+                </label>
                 <input
-                  value={hydrated ? apiKey : ""}
-                  readOnly
-                  className="input mono opacity-80"
+                  id="temperature"
+                  value={temperature}
+                  onChange={(e) => setTemperature(e.target.value)}
+                  className="w-full rounded-md border border-terminal-border bg-terminal-bg px-3 py-2 text-sm text-slate-100 outline-none focus:border-terminal-accent"
+                />
+              </div>
+              <div>
+                <label className="label mb-1 block" htmlFor="max-tokens">
+                  Max tokens (1–4096)
+                </label>
+                <input
+                  id="max-tokens"
+                  value={maxTokens}
+                  onChange={(e) => setMaxTokens(e.target.value)}
+                  className="w-full rounded-md border border-terminal-border bg-terminal-bg px-3 py-2 text-sm text-slate-100 outline-none focus:border-terminal-accent"
                 />
               </div>
             </div>
-            {meta && (
-              <div className="flex flex-wrap items-center gap-3 border-t border-terminal-border px-4 py-2.5 text-xs">
-                <StatusBadge status={meta.status} />
-                <span className="mono text-slate-300">{meta.latency} ms</span>
-                <span className="badge bg-slate-700/40 text-slate-300">
-                  source: {meta.source}
-                </span>
-                {meta.error && (
-                  <span className="text-red-300">· {meta.error}</span>
-                )}
-              </div>
+
+            <button
+              type="button"
+              onClick={run}
+              disabled={loading || !prompt.trim()}
+              className="btn-primary w-full"
+            >
+              <Play className="h-4 w-4" />
+              {loading ? "Calling NIM…" : "Send request"}
+            </button>
+
+            {!effectiveKey && (
+              <p className="text-xs text-slate-500">
+                No API key yet — generate one on the{" "}
+                <a className="text-terminal-accent hover:underline" href="/dashboard">
+                  Dashboard
+                </a>{" "}
+                first.
+              </p>
             )}
-          </section>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <ResponsePanel
-              title="Normalized response"
-              subtitle="Transit unified schema"
-              accent
-              value={normalized}
-              empty="Send a request to see the normalized JSON."
-            />
-            <ResponsePanel
-              title="Raw upstream response"
-              subtitle="What the provider actually returned"
-              value={raw}
-              empty="Send a request to inspect the raw upstream payload."
-            />
+            <CodeSnippet title="Request" tabs={snippets} />
           </div>
+        </section>
 
-          <section>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-100">
-                Copy this request
-              </h2>
-              <span className="text-xs text-slate-500">
-                Identical to the call &ldquo;Send&rdquo; just made
-              </span>
+        {/* Response panel */}
+        <section className="panel">
+          <header className="panel-header">
+            <div className="flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-terminal-accent" />
+              <h3 className="text-sm font-semibold text-slate-100">Response</h3>
             </div>
-            <CodeSnippet tabs={snippets} />
-          </section>
-        </div>
+            {result && (
+              <span className="text-xs text-slate-500">
+                <span
+                  className={`mono ${
+                    result.ok ? "text-emerald-300" : "text-red-300"
+                  }`}
+                >
+                  {result.status || "ERR"}
+                </span>{" "}
+                · {result.latencyMs}ms
+                {result.rateLimit.remaining !== null && (
+                  <>
+                    {" "}
+                    · quota {result.rateLimit.remaining}/{result.rateLimit.limit}
+                  </>
+                )}
+              </span>
+            )}
+          </header>
+          <div className="px-4 py-4">
+            {!result ? (
+              <p className="py-12 text-center text-sm text-slate-500">
+                Send a prompt to see the completion, token usage, latency, and
+                rate-limit headers.
+              </p>
+            ) : result.ok ? (
+              <div className="space-y-4">
+                <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md border border-terminal-border bg-terminal-bg px-3 py-3 text-sm text-slate-100">
+                  {result.content}
+                </pre>
+                <div className="grid grid-cols-3 gap-3 text-center text-xs">
+                  <Meta label="Model" value={result.model} />
+                  <Meta
+                    label="Tokens"
+                    value={String(result.usage.total_tokens)}
+                  />
+                  <Meta label="Latency" value={`${result.latencyMs}ms`} />
+                </div>
+              </div>
+            ) : (
+              <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md border border-red-900/50 bg-terminal-bg px-3 py-3 text-sm text-red-300">
+                {result.error || `Request failed with status ${result.status}`}
+              </pre>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: number }) {
-  let tone = "bg-slate-700/40 text-slate-300";
-  if (status >= 200 && status < 300) tone = "bg-emerald-500/15 text-emerald-300";
-  else if (status === 429) tone = "bg-amber-500/20 text-amber-300";
-  else if (status >= 400) tone = "bg-red-500/15 text-red-300";
-  return <span className={`badge ${tone} mono`}>{status || "ERR"}</span>;
-}
-
-function ResponsePanel({
-  title,
-  subtitle,
-  value,
-  empty,
-  accent = false,
-}: {
-  title: string;
-  subtitle: string;
-  value: unknown;
-  empty: string;
-  accent?: boolean;
-}) {
-  const pretty = useMemo(() => {
-    if (value === null || value === undefined) return "";
-    try {
-      return JSON.stringify(value, null, 2);
-    } catch {
-      return String(value);
-    }
-  }, [value]);
-
+function Meta({ label, value }: { label: string; value: string }) {
   return (
-    <div className={`panel overflow-hidden ${accent ? "shadow-glow" : ""}`}>
-      <div className="panel-header">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-100">{title}</h3>
-          <div className="text-xs text-slate-500">{subtitle}</div>
-        </div>
+    <div className="rounded-md border border-terminal-border bg-terminal-bg px-2 py-2">
+      <div className="label">{label}</div>
+      <div className="mono mt-1 truncate text-slate-200" title={value}>
+        {value}
       </div>
-      <pre className="mono max-h-[420px] overflow-auto bg-terminal-bg/60 px-4 py-3 text-xs leading-relaxed text-slate-200">
-        {pretty || <span className="text-slate-500">{empty}</span>}
-      </pre>
     </div>
   );
 }

@@ -2,13 +2,13 @@ import Link from "next/link";
 import {
   ArrowRight,
   BarChart3,
+  Bot,
   CheckCircle2,
-  Cloud,
   Code2,
+  Cpu,
   Gauge,
-  Newspaper,
+  KeyRound,
   ShieldCheck,
-  TrendingUp,
   Zap,
 } from "lucide-react";
 import { CodeSnippet } from "@/components/CodeSnippet";
@@ -42,14 +42,14 @@ const ARCHITECTURE_INSIGHTS = [
 
 const FEATURES = [
   {
-    icon: Zap,
-    title: "One key, three providers",
-    body: "Hit OpenWeather, NewsAPI, and Alpha Vantage through one base URL and one API key. No more juggling SDKs.",
+    icon: KeyRound,
+    title: "Your key, not the provider's",
+    body: "Clients authenticate with Transit af_ keys. The upstream NVIDIA key lives server-side only — never shipped to a browser or mobile app.",
   },
   {
     icon: ShieldCheck,
-    title: "Built-in rate limiting",
-    body: "Redis-backed hourly buckets, tier-aware limits, and X-RateLimit-* headers on every response.",
+    title: "Metered LLM access",
+    body: "Redis-backed hourly buckets, tier-aware quotas, and X-RateLimit-* headers on every completion. One runaway client can't burn the budget.",
   },
   {
     icon: BarChart3,
@@ -57,9 +57,9 @@ const FEATURES = [
     body: "Every call is logged with latency, status, and upstream timing. Visualize the whole funnel in /analytics.",
   },
   {
-    icon: Gauge,
-    title: "Smart caching",
-    body: "Sensible per-endpoint TTLs (weather 10m, news 5m, finance 1m) cut your upstream bill without stale data.",
+    icon: Cpu,
+    title: "Open models via NVIDIA NIM",
+    body: "OpenAI-compatible /v1/chat/completions backed by Llama 3.3 70B on build.nvidia.com. Swap models with one env var.",
   },
 ];
 
@@ -77,16 +77,16 @@ export default function LandingPage() {
               <span>Public beta — free tier live</span>
             </span>
             <h1 className="mt-6 text-balance text-4xl font-bold tracking-tight text-slate-50 sm:text-6xl">
-              One gateway for the APIs you{" "}
+              Ship LLM features without{" "}
               <span className="bg-gradient-to-r from-terminal-accent to-emerald-200 bg-clip-text text-transparent">
-                actually ship with
+                shipping your API key
               </span>
               .
             </h1>
             <p className="mt-5 text-balance text-base text-slate-300 sm:text-lg">
-              Transit unifies weather, news, and finance providers behind a
-              single rate-limited REST endpoint — with analytics, caching, and
-              authentication baked in.
+              Transit is a secure, rate-limited proxy for NVIDIA&apos;s open
+              LLMs. Your apps call one authenticated endpoint — the upstream
+              key, quotas, and usage analytics are handled at the gateway.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Link href="/dashboard" className="btn-primary">
@@ -111,13 +111,15 @@ export default function LandingPage() {
                 {
                   label: "curl",
                   language: "shell",
-                  code: `# Register, get an API key, make a call.
+                  code: `# Register, get an API key, ask an open LLM.
 curl -s -X POST https://api.transitapi.dev/auth/register \\
   -H "Content-Type: application/json" \\
   -d '{"email":"you@example.com","password":"supersecret123"}'
 
-curl -s "https://api.transitapi.dev/api/weather/Berlin" \\
-  -H "X-API-Key: af_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" | jq`,
+curl -s -X POST "https://api.transitapi.dev/api/v1/chat/completions" \\
+  -H "X-API-Key: af_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{"messages":[{"role":"user","content":"Write a python script that pings a URL"}]}' | jq`,
                 },
                 {
                   label: "Python",
@@ -125,22 +127,28 @@ curl -s "https://api.transitapi.dev/api/weather/Berlin" \\
                   code: `import httpx
 
 api_key = "af_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-weather = httpx.get(
-    "https://api.transitapi.dev/api/weather/Berlin",
+completion = httpx.post(
+    "https://api.transitapi.dev/api/v1/chat/completions",
     headers={"X-API-Key": api_key},
+    json={"messages": [{"role": "user", "content": "Write a python script that pings a URL"}]},
+    timeout=60.0,
 ).json()
 
-print(weather["temperature_c"], weather["condition"])`,
+print(completion["content"])`,
                 },
                 {
                   label: "JavaScript",
                   language: "javascript",
                   code: `const apiKey = "af_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
-const res = await fetch("https://api.transitapi.dev/api/weather/Berlin", {
-  headers: { "X-API-Key": apiKey },
+const res = await fetch("https://api.transitapi.dev/api/v1/chat/completions", {
+  method: "POST",
+  headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
+  body: JSON.stringify({
+    messages: [{ role: "user", content: "Write a python script that pings a URL" }],
+  }),
 });
-const weather = await res.json();
-console.log(weather.temperature_c, weather.condition);`,
+const { content, usage } = await res.json();
+console.log(content, usage);`,
                 },
               ]}
             />
@@ -152,10 +160,10 @@ console.log(weather.temperature_c, weather.condition);`,
       <section className="border-y border-terminal-border bg-terminal-panel/30">
         <div className="mx-auto grid max-w-7xl gap-4 px-4 py-10 sm:grid-cols-2 sm:px-6 lg:grid-cols-4">
           {[
-            { icon: Cloud, label: "Weather", path: "/api/weather/{city}" },
-            { icon: Newspaper, label: "News", path: "/api/news?topic=..." },
-            { icon: TrendingUp, label: "Finance", path: "/api/finance/quote" },
-            { icon: Zap, label: "Aggregate", path: "/api/aggregate?city=..." },
+            { icon: Bot, label: "Chat completions", path: "POST /api/v1/chat/completions" },
+            { icon: KeyRound, label: "API keys", path: "POST /auth/register" },
+            { icon: Gauge, label: "Rate limits", path: "X-RateLimit-* headers" },
+            { icon: Zap, label: "Usage analytics", path: "GET /api/analytics/usage" },
           ].map(({ icon: Icon, label, path }) => (
             <div
               key={label}
