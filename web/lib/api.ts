@@ -13,6 +13,7 @@ export type ChatResult = {
   model: string;
   usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   rateLimit: { limit: number | null; remaining: number | null };
+  cached: boolean;
   error?: string;
 };
 
@@ -34,6 +35,7 @@ export async function callChat(
     model: "",
     usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
     rateLimit: { limit: null, remaining: null },
+    cached: false,
   };
 
   if (!HAS_LIVE_BACKEND) {
@@ -62,6 +64,7 @@ export async function callChat(
     const latencyMs = Math.round(performance.now() - started);
     const limitH = response.headers.get("X-RateLimit-Limit");
     const remainingH = response.headers.get("X-RateLimit-Remaining");
+    const cached = response.headers.get("X-Cache") === "HIT";
     const text = await response.text();
     let parsed: Record<string, unknown> = {};
     try {
@@ -98,6 +101,7 @@ export async function callChat(
         limit: limitH ? Number(limitH) : null,
         remaining: remainingH ? Number(remainingH) : null,
       },
+      cached: cached || parsed.cached === true,
     };
   } catch (err) {
     return {
@@ -145,6 +149,9 @@ export async function fetchUsage(
       hourly: d.hourly ?? [],
       by_endpoint: d.by_endpoint ?? [],
       recent,
+      cache_hits: Number(d.cache_hits ?? 0),
+      cache_hit_rate: Number(d.cache_hit_rate ?? 0),
+      tokens_saved: Number(d.tokens_saved ?? 0),
     };
   } catch {
     return null;

@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     nvidia_model: str = Field(
         default="meta/llama-3.3-70b-instruct", alias="NVIDIA_MODEL"
     )
+    nvidia_embedding_model: str = Field(
+        default="nvidia/nv-embedqa-e5-v5", alias="NVIDIA_EMBEDDING_MODEL"
+    )
 
     free_tier_requests_per_hour: int = Field(
         default=100, alias="FREE_TIER_REQUESTS_PER_HOUR"
@@ -49,7 +52,14 @@ class Settings(BaseSettings):
         default=5000, alias="PRO_TIER_REQUESTS_PER_HOUR"
     )
 
-    upstream_timeout_seconds: float = Field(default=10.0, alias="UPSTREAM_TIMEOUT_SECONDS")
+    # Response cache TTLs (seconds). Identical chat/embedding requests within the
+    # window are served from Redis — no upstream call, no tokens billed. This is
+    # the cost-control core: RAG apps re-ask the same questions and re-embed the
+    # same chunks constantly. 0 disables caching for that route.
+    cache_ttl_chat: int = Field(default=86400, alias="CACHE_TTL_CHAT")
+    cache_ttl_embeddings: int = Field(default=604800, alias="CACHE_TTL_EMBEDDINGS")
+
+    upstream_timeout_seconds: float = Field(default=30.0, alias="UPSTREAM_TIMEOUT_SECONDS")
 
 
 @lru_cache

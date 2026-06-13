@@ -6,13 +6,14 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select, desc
 from sqlalchemy.orm import Session
 
+from app import cache
 from app.database import get_db
 from app.models import RequestLog
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 @router.get("/usage")
-def get_usage(
+async def get_usage(
     period: str = Query("24h", pattern="^(24h|7d|30d)$"),
     db: Session = Depends(get_db)
 ):
@@ -70,10 +71,20 @@ def get_usage(
         "latency_ms": log.response_time_ms
     } for log in recent_logs]
 
+    # Cost-control metrics: cumulative cache hits and tokens saved by serving
+    # repeated chat/embedding requests from Redis instead of NVIDIA NIM.
+    savings = await cache.get_savings()
+    total = savings["cache_hits"] + savings["cache_misses"]
+    hit_rate = round(savings["cache_hits"] / total, 3) if total else 0.0
+
     return {
         "today": today_reqs,
         "week": week_reqs,
         "hourly": hourly_data,
         "by_endpoint": by_endpoint,
-        "recent": recent
+        "recent": recent,
+        "cache_hits": savings["cache_hits"],
+        "cache_misses": savings["cache_misses"],
+        "cache_hit_rate": hit_rate,
+        "tokens_saved": savings["tokens_saved"],
     }

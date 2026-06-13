@@ -5,7 +5,7 @@ import { CodeSnippet } from "@/components/CodeSnippet";
 import { API_BASE_URL, HAS_LIVE_BACKEND } from "@/lib/api";
 import { useApiKey } from "@/lib/apiKey";
 import { MOCK_API_KEY, mockChatCompletion } from "@/lib/mock";
-import { buildChatSnippets, buildLanguageSnippets } from "@/lib/snippets";
+import { buildChatSnippets, buildEmbeddingSnippets, buildLanguageSnippets } from "@/lib/snippets";
 
 type EndpointDoc = {
   id: string;
@@ -32,7 +32,7 @@ export default function DocsPage() {
         path: "/api/v1/chat/completions",
         templatePath: "/api/v1/chat/completions",
         summary:
-          "OpenAI-compatible chat completion, proxied to NVIDIA NIM open models. Authenticate with your Transit key — the upstream NVIDIA key never leaves the server. Every call is metered against your tier quota.",
+          "OpenAI-compatible chat completion, proxied to NVIDIA NIM open models. The upstream NVIDIA key stays server-side; every call is metered against your quota. Identical requests are served from Redis (X-Cache: HIT) with zero upstream tokens billed.",
         params: [
           { name: "messages", in: "query", type: "array", required: true, description: "Chat history: [{role, content}] — roles: system, user, assistant (request body)." },
           { name: "model", in: "query", type: "string", required: false, description: "Override the default NIM model (meta/llama-3.3-70b-instruct)." },
@@ -41,6 +41,26 @@ export default function DocsPage() {
         ],
         example: () => mockChatCompletion(),
         callPath: "/api/v1/chat/completions",
+      },
+      {
+        id: "embeddings",
+        method: "POST",
+        path: "/api/v1/embeddings",
+        templatePath: "/api/v1/embeddings",
+        summary:
+          "OpenAI-compatible embeddings, proxied to NVIDIA NIM. Built for RAG: re-embedding identical text is pure waste, so a content-hash cache hit returns the vectors instantly with zero token cost (cached for 7 days by default).",
+        params: [
+          { name: "input", in: "query", type: "array", required: true, description: "List of strings to embed (request body)." },
+          { name: "model", in: "query", type: "string", required: false, description: "Override the default NIM embedding model (nvidia/nv-embedqa-e5-v5)." },
+        ],
+        example: () => ({
+          model: "nvidia/nv-embedqa-e5-v5",
+          data: [{ index: 0, embedding: [0.0123, -0.0456, 0.0789, "…"] }],
+          usage: { prompt_tokens: 5, total_tokens: 5 },
+          provider: "nvidia-nim",
+          cached: false,
+        }),
+        callPath: "/api/v1/embeddings",
       },
     ],
     [],
@@ -265,9 +285,11 @@ const { api_key } = await res.json();
 console.log(api_key);`,
         },
       ]
-    : doc.method === "POST"
-      ? buildChatSnippets({ baseUrl, apiKey })
-      : buildLanguageSnippets({ baseUrl, apiKey, path: doc.callPath });
+    : doc.id === "embeddings"
+      ? buildEmbeddingSnippets({ baseUrl, apiKey })
+      : doc.method === "POST"
+        ? buildChatSnippets({ baseUrl, apiKey })
+        : buildLanguageSnippets({ baseUrl, apiKey, path: doc.callPath });
 
   return (
     <article id={doc.id} className="scroll-mt-24 panel">

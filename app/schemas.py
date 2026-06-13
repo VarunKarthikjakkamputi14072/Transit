@@ -82,6 +82,30 @@ class ChatCompletionResponse(BaseModel):
     content: str
     usage: ChatUsage
     provider: str = "nvidia-nim"
+    cached: bool = False
+
+
+# --- Embeddings (NVIDIA NIM backed) ------------------------------------------
+
+
+class EmbeddingRequest(BaseModel):
+    input: list[str] = Field(min_length=1, description="Texts to embed.")
+    model: Optional[str] = Field(
+        default=None, description="Override the default NIM embedding model."
+    )
+
+
+class EmbeddingItem(BaseModel):
+    index: int
+    embedding: list[float]
+
+
+class EmbeddingResponse(BaseModel):
+    model: str
+    data: list[EmbeddingItem]
+    usage: ChatUsage
+    provider: str = "nvidia-nim"
+    cached: bool = False
 
 
 # --- Errors -------------------------------------------------------------------

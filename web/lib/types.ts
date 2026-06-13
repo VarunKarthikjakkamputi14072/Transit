@@ -28,4 +28,7 @@ export type UsageSummary = {
   hourly: HourlyPoint[];
   by_endpoint: EndpointPoint[];
   recent: RequestRecord[];
+  cache_hits: number;
+  cache_hit_rate: number;
+  tokens_saved: number;
 };

@@ -1,13 +1,13 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  BarChart3,
   Bot,
   CheckCircle2,
   Code2,
   Cpu,
   Gauge,
   KeyRound,
+  PiggyBank,
   ShieldCheck,
   Zap,
 } from "lucide-react";
@@ -15,51 +15,51 @@ import { CodeSnippet } from "@/components/CodeSnippet";
 
 const ARCHITECTURE_INSIGHTS = [
   {
-    name: "Dynamic Rate Limiting",
-    metric: "276 req/s",
-    context: "Load tested at 200 VUs",
-    description: "Built to demonstrate role-based access control (RBAC). The system dynamically applies different Redis sliding-window rate limits based on user tiers (e.g., 100/hr vs 5000/hr) without hardcoding limits at the gateway edge.",
+    name: "Response Caching",
+    metric: "$0",
+    context: "Cost of a repeated query",
+    description: "I built Transit because my RAG apps (MedQuery, ChatDoc) were re-asking the same questions and re-embedding the same chunks — and the bills were climbing. Transit caches identical chat + embedding requests in Redis, so a repeat costs nothing.",
     features: [
-      "Redis sliding window algorithm",
-      "Atomic Lua scripts to prevent race conditions",
-      "Dynamic tier resolution on the fly",
-    ],
-    accent: false,
-  },
-  {
-    name: "Cache Stampede Protection",
-    metric: "45ms",
-    context: "Median latency under load",
-    description: "Designed to handle high concurrency safely. If 50 users request the same data simultaneously, the gateway uses a Redis lock to ensure only one upstream request is made, serving the rest from cache.",
-    features: [
-      "Redis NX single-flight locks",
-      "Asynchronous request queuing",
-      "Background logging (asyncio.to_thread)",
+      "Exact-match cache on a SHA-256 of the request",
+      "Cache hit → instant, 0 upstream tokens billed",
+      "tokens_saved counter to measure the savings",
     ],
     accent: true,
+  },
+  {
+    name: "Per-Key Rate Limiting",
+    metric: "276 req/s",
+    context: "Gateway overhead at 200 VUs",
+    description: "One runaway retrieval loop shouldn't drain a month's token budget. Transit meters every call against a per-key tier quota with an atomic Redis sliding window, and fails open if Redis blips so a cache outage never takes the gateway down.",
+    features: [
+      "Atomic Lua sliding window in Redis",
+      "429 + Retry-After / X-RateLimit headers",
+      "Fail-open: Redis outage degrades, not breaks",
+    ],
+    accent: false,
   },
 ];
 
 const FEATURES = [
   {
+    icon: PiggyBank,
+    title: "Caches what you already paid for",
+    body: "Identical chat questions and repeated chunk embeddings are served from Redis — zero upstream tokens. The portal shows exactly how many tokens the cache saved.",
+  },
+  {
     icon: KeyRound,
     title: "Your key, not the provider's",
-    body: "Clients authenticate with Transit af_ keys. The upstream NVIDIA key lives server-side only — never shipped to a browser or mobile app.",
+    body: "Apps authenticate with Transit af_ keys. The upstream NVIDIA key lives server-side only — never shipped to a browser or mobile client.",
   },
   {
     icon: ShieldCheck,
     title: "Metered LLM access",
-    body: "Redis-backed hourly buckets, tier-aware quotas, and X-RateLimit-* headers on every completion. One runaway client can't burn the budget.",
-  },
-  {
-    icon: BarChart3,
-    title: "Usage analytics",
-    body: "Every call is logged with latency, status, and upstream timing. Visualize the whole funnel in /analytics.",
+    body: "Redis-backed per-key quotas and X-RateLimit-* headers on every call. One runaway loop can't burn the whole token budget.",
   },
   {
     icon: Cpu,
-    title: "Open models via NVIDIA NIM",
-    body: "OpenAI-compatible /v1/chat/completions backed by Llama 3.3 70B on build.nvidia.com. Swap models with one env var.",
+    title: "Chat + embeddings via NVIDIA NIM",
+    body: "OpenAI-compatible /v1/chat/completions and /v1/embeddings backed by NVIDIA NIM. Point any RAG app's base_url at Transit — it's a drop-in.",
   },
 ];
 
@@ -77,16 +77,17 @@ export default function LandingPage() {
               <span>Public beta — free tier live</span>
             </span>
             <h1 className="mt-6 text-balance text-4xl font-bold tracking-tight text-slate-50 sm:text-6xl">
-              Ship LLM features without{" "}
+              Stop paying twice for the{" "}
               <span className="bg-gradient-to-r from-terminal-accent to-emerald-200 bg-clip-text text-transparent">
-                shipping your API key
+                same LLM call
               </span>
               .
             </h1>
             <p className="mt-5 text-balance text-base text-slate-300 sm:text-lg">
-              Transit is a secure, rate-limited proxy for NVIDIA&apos;s open
-              LLMs. Your apps call one authenticated endpoint — the upstream
-              key, quotas, and usage analytics are handled at the gateway.
+              Transit is a caching, rate-limited gateway for NVIDIA&apos;s open
+              LLMs. Point your RAG apps at one endpoint — repeated questions and
+              embeddings come straight from Redis, the upstream key stays
+              server-side, and every key is metered.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Link href="/dashboard" className="btn-primary">
@@ -161,9 +162,9 @@ console.log(content, usage);`,
         <div className="mx-auto grid max-w-7xl gap-4 px-4 py-10 sm:grid-cols-2 sm:px-6 lg:grid-cols-4">
           {[
             { icon: Bot, label: "Chat completions", path: "POST /api/v1/chat/completions" },
-            { icon: KeyRound, label: "API keys", path: "POST /auth/register" },
+            { icon: Cpu, label: "Embeddings", path: "POST /api/v1/embeddings" },
+            { icon: PiggyBank, label: "Cached", path: "X-Cache: HIT · 0 tokens" },
             { icon: Gauge, label: "Rate limits", path: "X-RateLimit-* headers" },
-            { icon: Zap, label: "Usage analytics", path: "GET /api/analytics/usage" },
           ].map(({ icon: Icon, label, path }) => (
             <div
               key={label}

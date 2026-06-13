@@ -101,3 +101,46 @@ console.log(content, usage);`,
     },
   ];
 }
+
+/** POST embeddings snippets (OpenAI-compatible body). */
+export function buildEmbeddingSnippets({ baseUrl, apiKey }: { baseUrl: string; apiKey: string }): CodeTab[] {
+  const url = `${baseUrl}/api/v1/embeddings`;
+  const body = `{"input":["the same chunk of text"]}`;
+  return [
+    {
+      label: "curl",
+      language: "shell",
+      code: `curl -s -X POST "${url}" \\
+  -H "X-API-Key: ${apiKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '${body}' | jq`,
+    },
+    {
+      label: "Python",
+      language: "python",
+      code: `import httpx
+
+API_KEY = "${apiKey}"
+
+vectors = httpx.post(
+    "${url}",
+    headers={"X-API-Key": API_KEY},
+    json={"input": ["the same chunk of text"]},
+    timeout=30.0,
+).json()
+
+print(vectors["data"][0]["embedding"][:5], "cached:", vectors["cached"])`,
+    },
+    {
+      label: "JavaScript",
+      language: "javascript",
+      code: `const res = await fetch("${url}", {
+  method: "POST",
+  headers: { "X-API-Key": "${apiKey}", "Content-Type": "application/json" },
+  body: JSON.stringify({ input: ["the same chunk of text"] }),
+});
+const { data, cached } = await res.json();
+console.log(data[0].embedding.slice(0, 5), "cached:", cached);`,
+    },
+  ];
+}

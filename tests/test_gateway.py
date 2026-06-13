@@ -52,10 +52,66 @@ def test_chat_returns_normalized_completion(client, registered_developer, monkey
         headers={"X-API-Key": api_key},
     )
     assert response.status_code == 200
+    assert response.headers["X-Cache"] == "MISS"
     data = response.json()
     assert data["content"] == "Hello from the mock model."
     assert data["provider"] == "nvidia-nim"
     assert data["usage"]["total_tokens"] == 32
+
+
+def test_chat_second_identical_request_is_cache_hit(
+    client, registered_developer, monkeypatch
+):
+    """Same prompt twice → second served from Redis, upstream called once."""
+    _, _, api_key = registered_developer
+    calls = {"n": 0}
+
+    async def fake_fetch(req):
+        calls["n"] += 1
+        return _chat_fixture(), 42
+
+    monkeypatch.setattr("app.routers.gateway.fetch_chat_completion", fake_fetch)
+    headers = {"X-API-Key": api_key}
+    body = _chat_body("Deterministic question")
+
+    first = client.post("/api/v1/chat/completions", json=body, headers=headers)
+    second = client.post("/api/v1/chat/completions", json=body, headers=headers)
+
+    assert first.headers["X-Cache"] == "MISS"
+    assert second.headers["X-Cache"] == "HIT"
+    assert second.json()["cached"] is True
+    assert second.json()["content"] == first.json()["content"]
+    assert calls["n"] == 1  # upstream hit only once — the cache saved the second
+
+
+def test_embeddings_cache_hit_and_savings(client, registered_developer, monkeypatch):
+    _, _, api_key = registered_developer
+    from app.schemas import ChatUsage, EmbeddingItem, EmbeddingResponse
+
+    calls = {"n": 0}
+
+    async def fake_embed(req):
+        calls["n"] += 1
+        return (
+            EmbeddingResponse(
+                model="nvidia/nv-embedqa-e5-v5",
+                data=[EmbeddingItem(index=0, embedding=[0.1, 0.2, 0.3])],
+                usage=ChatUsage(prompt_tokens=5, total_tokens=5),
+            ),
+            12,
+        )
+
+    monkeypatch.setattr("app.routers.gateway.fetch_embeddings", fake_embed)
+    headers = {"X-API-Key": api_key}
+    body = {"input": ["the same chunk of text"]}
+
+    miss = client.post("/api/v1/embeddings", json=body, headers=headers)
+    hit = client.post("/api/v1/embeddings", json=body, headers=headers)
+
+    assert miss.status_code == 200 and miss.headers["X-Cache"] == "MISS"
+    assert hit.headers["X-Cache"] == "HIT"
+    assert hit.json()["data"][0]["embedding"] == [0.1, 0.2, 0.3]
+    assert calls["n"] == 1
 
 
 def test_chat_forwards_caller_messages(client, registered_developer, monkeypatch):

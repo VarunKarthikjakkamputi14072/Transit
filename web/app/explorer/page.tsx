@@ -63,9 +63,10 @@ export default function ExplorerPage() {
         </h1>
         <p className="max-w-2xl text-sm text-slate-400">
           Send a prompt to <span className="mono">POST /api/v1/chat/completions</span>.
-          Transit forwards it to NVIDIA NIM with the server-side key, meters the
-          call against your quota, and returns the completion with rate-limit
-          headers.
+          Transit forwards it to NVIDIA NIM with the server-side key and meters
+          the call against your quota. <span className="text-slate-300">Send the
+          same prompt twice</span> — the second returns <span className="mono">CACHE
+          HIT</span> from Redis, instantly, billing zero tokens.
         </p>
       </header>
 
@@ -174,21 +175,39 @@ export default function ExplorerPage() {
               <h3 className="text-sm font-semibold text-slate-100">Response</h3>
             </div>
             {result && (
-              <span className="text-xs text-slate-500">
-                <span
-                  className={`mono ${
-                    result.ok ? "text-emerald-300" : "text-red-300"
-                  }`}
-                >
-                  {result.status || "ERR"}
-                </span>{" "}
-                · {result.latencyMs}ms
-                {result.rateLimit.remaining !== null && (
-                  <>
-                    {" "}
-                    · quota {result.rateLimit.remaining}/{result.rateLimit.limit}
-                  </>
+              <span className="flex items-center gap-2 text-xs text-slate-500">
+                {result.ok && (
+                  <span
+                    className={`badge mono ${
+                      result.cached
+                        ? "bg-terminal-accentDim/40 text-terminal-accent"
+                        : "bg-slate-500/15 text-slate-300"
+                    }`}
+                    title={
+                      result.cached
+                        ? "Served from Redis — 0 tokens billed"
+                        : "Forwarded to NVIDIA NIM"
+                    }
+                  >
+                    {result.cached ? "CACHE HIT" : "CACHE MISS"}
+                  </span>
                 )}
+                <span>
+                  <span
+                    className={`mono ${
+                      result.ok ? "text-emerald-300" : "text-red-300"
+                    }`}
+                  >
+                    {result.status || "ERR"}
+                  </span>{" "}
+                  · {result.latencyMs}ms
+                  {result.rateLimit.remaining !== null && (
+                    <>
+                      {" "}
+                      · quota {result.rateLimit.remaining}/{result.rateLimit.limit}
+                    </>
+                  )}
+                </span>
               </span>
             )}
           </header>

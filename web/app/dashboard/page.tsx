@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Activity, Gauge, History, KeyRound, Loader2 } from "lucide-react";
+import { ArrowRight, Activity, History, KeyRound, Loader2, PiggyBank } from "lucide-react";
 import { ApiKeyCard } from "@/components/ApiKeyCard";
 import { CodeSnippet } from "@/components/CodeSnippet";
 import { UsageChart } from "@/components/UsageChart";
@@ -79,23 +79,23 @@ export default function DashboardPage() {
         </div>
         <div className="grid gap-6">
           <StatCard
+            icon={<PiggyBank className="h-4 w-4" />}
+            label="Tokens saved by cache"
+            value={usage.tokens_saved.toLocaleString()}
+            footnote={`${Math.round(usage.cache_hit_rate * 100)}% cache hit rate · ${usage.cache_hits.toLocaleString()} hits`}
+            tone="accent"
+          />
+          <StatCard
             icon={<Activity className="h-4 w-4" />}
             label="Requests today"
             value={usage.today.toLocaleString()}
             footnote={`${usage.week.toLocaleString()} this week · gateway-wide`}
           />
           <StatCard
-            icon={<Gauge className="h-4 w-4" />}
-            label="Avg latency"
-            value={`${avgLatency} ms`}
-            footnote="Across recent gateway requests"
-            tone="accent"
-          />
-          <StatCard
             icon={<History className="h-4 w-4" />}
             label="Last 24 hours"
             value={`${last24h.toLocaleString()} req`}
-            footnote="See the analytics tab for breakdowns"
+            footnote={`${avgLatency} ms avg · see analytics for breakdowns`}
           />
         </div>
       </div>

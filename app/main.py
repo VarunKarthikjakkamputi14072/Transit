@@ -55,7 +55,7 @@ def create_app() -> FastAPI:
         title="Transit",
         version=__version__,
         description=(
-            "Transit is an AI gateway that proxies NVIDIA NIM open-LLM inference "
+            "Transit is an AI gateway that proxies NVIDIA NIM chat + embeddings "
             "behind a unified, authenticated, rate-limited REST surface. Clients "
             "use Transit API keys; the upstream NVIDIA key never leaves the server."
         ),

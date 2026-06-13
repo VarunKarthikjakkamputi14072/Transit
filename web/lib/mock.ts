@@ -47,8 +47,12 @@ export function mockUsage(): UsageSummary {
     hourly,
     by_endpoint: [
       { endpoint: "/api/v1/chat/completions", requests: 286 },
+      { endpoint: "/api/v1/embeddings", requests: 112 },
       { endpoint: "/auth/register", requests: 34 },
     ],
     recent,
+    cache_hits: 184,
+    cache_hit_rate: 0.46,
+    tokens_saved: 88420,
   };
 }
