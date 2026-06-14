@@ -1,9 +1,10 @@
-"""NVIDIA NIM (build.nvidia.com) chat-completions client.
+"""Chat + embedding clients for the upstream LLM providers.
 
-The endpoint is OpenAI-compatible, so this is a thin POST wrapper around the
-shared HTTP client with latency tracking and error normalization. The
-server-side NVIDIA_API_KEY is injected as an Authorization: Bearer header so it
-never reaches the client.
+Chat uses a provider **waterfall**: NVIDIA NIM primary, then Groq → OpenRouter →
+Gemini as fallbacks. If a provider is down, rate-limited, or unconfigured, the
+gateway falls through to the next, so a single provider outage doesn't take chat
+down. All are OpenAI-compatible; their keys live server-side only and are
+injected as `Authorization: Bearer`. Embeddings use NVIDIA NIM.
 """
 
 from __future__ import annotations
@@ -22,56 +23,82 @@ from app.schemas import (
 from app.upstream.base import UpstreamError, get_http_client
 
 
+def _chat_providers(settings) -> list[tuple[str, str, str, str]]:
+    """Ordered chat waterfall: (name, base_url, api_key, default_model).
+
+    NVIDIA NIM is primary; Groq, OpenRouter, then Gemini are fallbacks. Only
+    providers with a configured key are included. Centralizing the keys here is
+    the point of the gateway — the apps behind it never see any of them.
+    """
+    s = settings
+    candidates = [
+        ("nvidia-nim", s.nvidia_base_url, s.nvidia_api_key, s.nvidia_model),
+        ("groq", s.groq_base_url, s.groq_api_key, s.groq_model),
+        ("openrouter", s.openrouter_base_url, s.openrouter_api_key, s.openrouter_model),
+        ("gemini", s.gemini_base_url, s.gemini_api_key, s.gemini_model),
+    ]
+    return [(n, b, k, m) for (n, b, k, m) in candidates if k]
+
+
 async def fetch_chat_completion(
     req: ChatCompletionRequest,
 ) -> tuple[ChatCompletionResponse, int]:
-    """Return ``(completion, upstream_latency_ms)`` from NVIDIA NIM."""
-    settings = get_settings()
-    if not settings.nvidia_api_key:
-        raise UpstreamError(
-            "NVIDIA NIM API key is not configured (set NVIDIA_API_KEY).",
-            status_code=503,
-            provider="nvidia-nim",
-        )
+    """Return ``(completion, upstream_latency_ms)`` via the provider waterfall.
 
-    model = req.model or settings.nvidia_model
-    payload = {
-        "model": model,
-        "messages": [m.model_dump() for m in req.messages],
-        "temperature": req.temperature,
-        "max_tokens": req.max_tokens,
-        "stream": False,
-    }
-    headers = {
-        "Authorization": f"Bearer {settings.nvidia_api_key}",
-        "Content-Type": "application/json",
-    }
+    Tries each configured provider in order; on a network error or HTTP >=400
+    (rate limit, outage, bad model), it falls through to the next. Returns the
+    first success, tagged with the provider that served it. Raises only if every
+    provider fails.
+    """
+    settings = get_settings()
+    providers = _chat_providers(settings)
+    if not providers:
+        raise UpstreamError(
+            "No chat provider configured (set NVIDIA_API_KEY or a fallback key).",
+            status_code=503,
+            provider="none",
+        )
 
     client = get_http_client()
-    url = f"{settings.nvidia_base_url.rstrip('/')}/chat/completions"
-    start = time.perf_counter()
-    try:
-        response = await client.post(url, json=payload, headers=headers)
-    except Exception as exc:  # network / timeout
-        raise UpstreamError(
-            f"NVIDIA NIM request failed: {exc}",
-            status_code=504,
-            provider="nvidia-nim",
-        ) from exc
-    latency_ms = int((time.perf_counter() - start) * 1000)
+    errors: list[str] = []
+    for i, (name, base_url, api_key, default_model) in enumerate(providers):
+        # Honor an explicit model override only on the primary; fallbacks use
+        # their own model (the override likely isn't valid on another provider).
+        model = (req.model or default_model) if i == 0 else default_model
+        payload = {
+            "model": model,
+            "messages": [m.model_dump() for m in req.messages],
+            "temperature": req.temperature,
+            "max_tokens": req.max_tokens,
+            "stream": False,
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        url = f"{base_url.rstrip('/')}/chat/completions"
+        start = time.perf_counter()
+        try:
+            response = await client.post(url, json=payload, headers=headers)
+        except Exception as exc:  # network / timeout → try next provider
+            errors.append(f"{name}: {exc}")
+            continue
+        latency_ms = int((time.perf_counter() - start) * 1000)
 
-    if response.status_code >= 400:
-        raise UpstreamError(
-            f"NVIDIA NIM error {response.status_code}: {response.text[:300]}",
-            status_code=502,
-            provider="nvidia-nim",
-        )
+        if response.status_code >= 400:
+            errors.append(f"{name}: HTTP {response.status_code} {response.text[:120]}")
+            continue
 
-    data = response.json()
-    return _normalize(data, model), latency_ms
+        return _normalize(response.json(), model, provider=name), latency_ms
+
+    raise UpstreamError(
+        "All chat providers failed — " + " | ".join(errors),
+        status_code=502,
+        provider="waterfall",
+    )
 
 
-def _normalize(data: dict, model: str) -> ChatCompletionResponse:
+def _normalize(data: dict, model: str, provider: str = "nvidia-nim") -> ChatCompletionResponse:
     choices = data.get("choices") or []
     content = ""
     if choices:
@@ -89,6 +116,7 @@ def _normalize(data: dict, model: str) -> ChatCompletionResponse:
         model=str(data.get("model") or model),
         content=content,
         usage=usage,
+        provider=provider,
     )
 
 

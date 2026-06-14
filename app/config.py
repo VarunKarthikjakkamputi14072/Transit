@@ -45,6 +45,32 @@ class Settings(BaseSettings):
         default="nvidia/nv-embedqa-e5-v5", alias="NVIDIA_EMBEDDING_MODEL"
     )
 
+    # Chat waterfall: if NVIDIA NIM is down / rate-limited / missing, Transit
+    # falls through to these OpenAI-compatible providers in order. All serve
+    # Llama 3.3 70B (Gemini is a different model but a strong final fallback).
+    # A provider is only in the chain if its key is set.
+    groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
+    groq_base_url: str = Field(
+        default="https://api.groq.com/openai/v1", alias="GROQ_BASE_URL"
+    )
+    groq_model: str = Field(default="llama-3.3-70b-versatile", alias="GROQ_MODEL")
+
+    openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL"
+    )
+    openrouter_model: str = Field(
+        default="meta-llama/llama-3.3-70b-instruct", alias="OPENROUTER_MODEL"
+    )
+
+    # Google Gemini via its OpenAI-compatible endpoint (optional final fallback).
+    gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
+    gemini_base_url: str = Field(
+        default="https://generativelanguage.googleapis.com/v1beta/openai",
+        alias="GEMINI_BASE_URL",
+    )
+    gemini_model: str = Field(default="gemini-2.0-flash", alias="GEMINI_MODEL")
+
     free_tier_requests_per_hour: int = Field(
         default=100, alias="FREE_TIER_REQUESTS_PER_HOUR"
     )
