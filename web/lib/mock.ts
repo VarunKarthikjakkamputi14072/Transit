@@ -13,46 +13,31 @@ export function mockChatCompletion() {
   };
 }
 
-export function mockUsage(): UsageSummary {
+/**
+ * Zeroed usage — the honest starting state for the dashboard/analytics.
+ *
+ * The pages render this until the live /api/analytics/usage fetch resolves, and
+ * keep it if the backend is unreachable. We deliberately do NOT fabricate
+ * traffic: the portal shows real numbers from request_logs + Redis, or zeros —
+ * never invented charts.
+ */
+export function emptyUsage(): UsageSummary {
   const now = new Date();
   const hourly = Array.from({ length: 24 }, (_, i) => {
     const d = new Date(now);
     d.setHours(now.getHours() - (23 - i), 0, 0, 0);
-    const base = 8 + Math.sin(i / 2.5) * 6 + (i % 5);
-    return {
-      hour: `${d.getHours().toString().padStart(2, "0")}:00`,
-      requests: Math.max(0, Math.round(base + Math.random() * 4)),
-    };
+    return { hour: `${d.getHours().toString().padStart(2, "0")}:00`, requests: 0 };
   });
-  const today = hourly.reduce((a, b) => a + b.requests, 0);
-  const week = today * 6 + 42;
-
-  const recent = Array.from({ length: 12 }, (_, i) => {
-    const statuses = [200, 200, 200, 200, 429, 200, 200, 502];
-    const latency = [820, 1240, 695, 1410, 88, 1670, 980, 745];
-    return {
-      id: `req_${i}`,
-      endpoint: "/api/v1/chat/completions",
-      status: statuses[i % statuses.length],
-      latency_ms: latency[i % latency.length] + (i % 3) * 25,
-      timestamp: new Date(now.getTime() - i * 3 * 60 * 1000).toISOString(),
-    };
-  });
-
   return {
-    today,
-    week,
+    today: 0,
+    week: 0,
     hourly_limit: 100,
-    remaining: Math.max(0, 100 - hourly[hourly.length - 1].requests),
+    remaining: 100,
     hourly,
-    by_endpoint: [
-      { endpoint: "/api/v1/chat/completions", requests: 286 },
-      { endpoint: "/api/v1/embeddings", requests: 112 },
-      { endpoint: "/auth/register", requests: 34 },
-    ],
-    recent,
-    cache_hits: 184,
-    cache_hit_rate: 0.46,
-    tokens_saved: 88420,
+    by_endpoint: [],
+    recent: [],
+    cache_hits: 0,
+    cache_hit_rate: 0,
+    tokens_saved: 0,
   };
 }

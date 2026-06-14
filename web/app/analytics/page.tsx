@@ -13,15 +13,15 @@ import {
 } from "recharts";
 import { UsageChart } from "@/components/UsageChart";
 import { RequestLogTable } from "@/components/RequestLog";
-import { mockUsage } from "@/lib/mock";
+import { emptyUsage } from "@/lib/mock";
 import { fetchUsage } from "@/lib/api";
 
 const BAR_COLORS = ["#22d3a3", "#38bdf8", "#a78bfa", "#f472b6"];
 
 export default function AnalyticsPage() {
-  // Render mock data instantly, then swap in real gateway traffic from
-  // /api/analytics/usage when a live backend is configured.
-  const [usage, setUsage] = useState(() => mockUsage());
+  // Starts at zero, fills with real gateway traffic from /api/analytics/usage.
+  // Never fabricated — real numbers or zeros, never invented traffic.
+  const [usage, setUsage] = useState(() => emptyUsage());
   const [isLive, setIsLive] = useState(false);
 
   useEffect(() => {
@@ -61,13 +61,13 @@ export default function AnalyticsPage() {
           {isLive ? (
             <>
               Live gateway traffic, read from{" "}
-              <span className="mono">request_logs</span> on the backend.
+              <span className="mono">request_logs</span> and Redis cache counters.
             </>
           ) : (
             <>
-              Demo data shown below — start the backend (or set{" "}
-              <span className="mono">NEXT_PUBLIC_APIFORGE_BASE_URL</span>) to see
-              live traffic from <span className="mono">request_logs</span>.
+              Waking the backend… numbers fill in from{" "}
+              <span className="mono">request_logs</span> once it responds (Render
+              free tier cold-starts in ~30s). No data is fabricated.
             </>
           )}
         </p>
@@ -75,8 +75,15 @@ export default function AnalyticsPage() {
 
       <section className="mt-8 grid gap-4 sm:grid-cols-4">
         <Stat label="Requests today" value={usage.today.toLocaleString()} />
-        <Stat label="This week" value={usage.week.toLocaleString()} />
-        <Stat label="Avg latency" value={`${avgLatency} ms`} />
+        <Stat
+          label="Tokens saved by cache"
+          value={usage.tokens_saved.toLocaleString()}
+          tone="accent"
+        />
+        <Stat
+          label="Cache hit rate"
+          value={`${Math.round(usage.cache_hit_rate * 100)}%`}
+        />
         <Stat label="Error rate" value={`${errorRate}%`} tone={errorRate > 5 ? "warn" : "default"} />
       </section>
 
@@ -163,18 +170,18 @@ function Stat({
 }: {
   label: string;
   value: string;
-  tone?: "default" | "warn";
+  tone?: "default" | "warn" | "accent";
 }) {
+  const color =
+    tone === "warn"
+      ? "text-amber-300"
+      : tone === "accent"
+        ? "text-terminal-accent"
+        : "text-slate-50";
   return (
-    <div className="panel p-4">
+    <div className={`panel p-4 ${tone === "accent" ? "shadow-glow" : ""}`}>
       <div className="text-xs uppercase tracking-wider text-slate-400">{label}</div>
-      <div
-        className={`mt-2 mono text-2xl font-semibold ${
-          tone === "warn" ? "text-amber-300" : "text-slate-50"
-        }`}
-      >
-        {value}
-      </div>
+      <div className={`mt-2 mono text-2xl font-semibold ${color}`}>{value}</div>
     </div>
   );
 }

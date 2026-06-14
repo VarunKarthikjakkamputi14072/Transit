@@ -7,15 +7,16 @@ import { ApiKeyCard } from "@/components/ApiKeyCard";
 import { CodeSnippet } from "@/components/CodeSnippet";
 import { UsageChart } from "@/components/UsageChart";
 import { useApiKey } from "@/lib/apiKey";
-import { mockUsage } from "@/lib/mock";
+import { emptyUsage } from "@/lib/mock";
 import { buildChatSnippets } from "@/lib/snippets";
 import { API_BASE_URL, HAS_LIVE_BACKEND, fetchUsage, registerDeveloper } from "@/lib/api";
 
 export default function DashboardPage() {
   const { apiKey, createdAt, setApiKey, hydrated } = useApiKey();
 
-  // Real gateway traffic (global) with a mock fallback only when no backend.
-  const [usage, setUsage] = useState(() => mockUsage());
+  // Starts at zero, fills with real /api/analytics/usage data once it loads.
+  // Never fabricated — shows real numbers or zeros, never invented traffic.
+  const [usage, setUsage] = useState(() => emptyUsage());
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
