@@ -186,12 +186,20 @@ def test_chat_upstream_error_maps_to_http_status(
     assert "NIM is down" in response.json()["detail"]
 
 
-def test_chat_missing_nvidia_key_returns_503(client, registered_developer, monkeypatch):
-    """Without NVIDIA_API_KEY the upstream client refuses cleanly (no 500)."""
+def test_chat_no_provider_configured_returns_503(client, registered_developer, monkeypatch):
+    """With no provider keys at all, the waterfall refuses cleanly (no 500)."""
     _, _, api_key = registered_developer
     from app.config import get_settings
 
-    monkeypatch.setattr(get_settings(), "nvidia_api_key", "")
+    s = get_settings()
+    for attr in (
+        "nvidia_api_key",
+        "groq_api_key",
+        "openrouter_api_key",
+        "google_api_key",
+        "gemini_api_key",
+    ):
+        monkeypatch.setattr(s, attr, "")
 
     response = client.post(
         "/api/v1/chat/completions",
@@ -199,4 +207,4 @@ def test_chat_missing_nvidia_key_returns_503(client, registered_developer, monke
         headers={"X-API-Key": api_key},
     )
     assert response.status_code == 503
-    assert "NVIDIA" in response.json()["detail"]
+    assert "No chat provider" in response.json()["detail"]

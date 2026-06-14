@@ -63,6 +63,17 @@ class Settings(BaseSettings):
         default="meta-llama/llama-3.3-70b-instruct", alias="OPENROUTER_MODEL"
     )
 
+    # Google Gemma via NVIDIA NIM (a Google model on NIM infra). Uses a separate
+    # NVIDIA key, so it also gives key-level failover: if the primary NIM key is
+    # rate-limited, this rung (different key) can still serve.
+    google_api_key: str = Field(default="", alias="GOOGLE_API_KEY")
+    google_base_url: str = Field(
+        default="https://integrate.api.nvidia.com/v1", alias="GOOGLE_BASE_URL"
+    )
+    google_model: str = Field(
+        default="google/diffusiongemma-26b-a4b-it", alias="GOOGLE_MODEL"
+    )
+
     # Google Gemini via its OpenAI-compatible endpoint (optional final fallback).
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
     gemini_base_url: str = Field(

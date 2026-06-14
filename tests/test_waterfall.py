@@ -41,6 +41,7 @@ def test_provider_chain_includes_only_configured(monkeypatch):
     monkeypatch.setattr(s, "nvidia_api_key", "k-nvidia")
     monkeypatch.setattr(s, "groq_api_key", "k-groq")
     monkeypatch.setattr(s, "openrouter_api_key", "")
+    monkeypatch.setattr(s, "google_api_key", "")
     monkeypatch.setattr(s, "gemini_api_key", "")
     assert _providers_order() == ["nvidia-nim", "groq"]
 
@@ -51,6 +52,7 @@ async def test_waterfall_falls_through_to_groq_when_nvidia_errors(monkeypatch):
     monkeypatch.setattr(s, "nvidia_api_key", "k-nvidia")
     monkeypatch.setattr(s, "groq_api_key", "k-groq")
     monkeypatch.setattr(s, "openrouter_api_key", "")
+    monkeypatch.setattr(s, "google_api_key", "")
     monkeypatch.setattr(s, "gemini_api_key", "")
 
     calls: list[str] = []
@@ -76,6 +78,7 @@ async def test_waterfall_raises_when_all_providers_fail(monkeypatch):
     monkeypatch.setattr(s, "nvidia_api_key", "k-nvidia")
     monkeypatch.setattr(s, "groq_api_key", "k-groq")
     monkeypatch.setattr(s, "openrouter_api_key", "")
+    monkeypatch.setattr(s, "google_api_key", "")
     monkeypatch.setattr(s, "gemini_api_key", "")
 
     class FakeClient:

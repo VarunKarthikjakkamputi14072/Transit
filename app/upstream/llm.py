@@ -35,6 +35,7 @@ def _chat_providers(settings) -> list[tuple[str, str, str, str]]:
         ("nvidia-nim", s.nvidia_base_url, s.nvidia_api_key, s.nvidia_model),
         ("groq", s.groq_base_url, s.groq_api_key, s.groq_model),
         ("openrouter", s.openrouter_base_url, s.openrouter_api_key, s.openrouter_model),
+        ("google-gemma", s.google_base_url, s.google_api_key, s.google_model),
         ("gemini", s.gemini_base_url, s.gemini_api_key, s.gemini_model),
     ]
     return [(n, b, k, m) for (n, b, k, m) in candidates if k]
